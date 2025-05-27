@@ -870,6 +870,11 @@
                 remove_outliers: $('#removeOutliers').is(':checked'),
                 outlier_multiplier: parseFloat($('#outlierMultiplier').val()),
                 confidence_interval: parseFloat($('#confInterval').val()) / 100,
+                // Model specific parameters
+                model_type: $('#modelType').val(),
+                auto_tune: $('#autoTune').is(':checked'), // Added auto_tune
+                train_split: parseFloat($('#trainSplit').val()) / 100, // Added train_split
+                // Prophet specific parameters (only relevant if model_type is 'prophet')
                 changepoint_prior_scale: parseFloat($('#changepointPriorScale').val()),
                 seasonality_prior_scale: parseFloat($('#seasonalityPriorScale').val()),
                 yearly_seasonality: $('#yearlySeasonality').is(':checked'),
@@ -877,6 +882,17 @@
                 daily_seasonality: $('#dailySeasonality').is(':checked'),
                 adjustments: adjustments
             };
+
+            // Add display date filters to params if they are set
+            const displayDateFrom = $('#dateFrom').val();
+            if (displayDateFrom) {
+                params.date_filter_from = displayDateFrom;
+            }
+
+            const displayDateTo = $('#dateTo').val();
+            if (displayDateTo) {
+                params.date_filter_to = displayDateTo;
+            }
 
             console.log('Параметры прогноза:', params);
 
