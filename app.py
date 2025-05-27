@@ -28,6 +28,7 @@ from sklearn.preprocessing import StandardScaler
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
+import optuna
 
 warnings.filterwarnings('ignore')
 logging.getLogger('prophet').setLevel(logging.WARNING)
@@ -114,6 +115,273 @@ class ForecastEngine:
             return "developing"
         else:
             return "new"
+            
+    def auto_tune_prophet(self, df_cafe, metric, params, n_trials=50):
+        """Автоматическая настройка гиперпараметров для Prophet"""
+        # Готовим данные
+        df_model = df_cafe[['Дата', metric]].rename(columns={'Дата': 'ds', metric: 'y'})
+        
+        # Доля обучающей выборки
+        train_split = params.get('train_split', 0.8)
+        train_size = int(len(df_model) * train_split)
+        train_df = df_model.iloc[:train_size]
+        test_df = df_model.iloc[train_size:]
+        
+        # Если тестовая выборка слишком маленькая, используем кросс-валидацию
+        if len(test_df) < 30:
+            test_df = df_model.iloc[-30:]
+            
+        # Функция цели для оптимизации
+        def objective(trial):
+            # Гиперпараметры для оптимизации
+            changepoint_prior_scale = trial.suggest_float('changepoint_prior_scale', 0.001, 0.5, log=True)
+            seasonality_prior_scale = trial.suggest_float('seasonality_prior_scale', 0.01, 10, log=True)
+            holidays_prior_scale = trial.suggest_float('holidays_prior_scale', 0.01, 10, log=True)
+            
+            # Обучение модели
+            model = Prophet(
+                holidays=self.holidays,
+                changepoint_prior_scale=changepoint_prior_scale,
+                seasonality_prior_scale=seasonality_prior_scale,
+                holidays_prior_scale=holidays_prior_scale,
+                yearly_seasonality=params.get('yearly_seasonality', True),
+                weekly_seasonality=params.get('weekly_seasonality', True),
+                daily_seasonality=params.get('daily_seasonality', False)
+            )
+            
+            model.fit(train_df)
+            
+            # Прогноз
+            future = model.make_future_dataframe(periods=len(test_df))
+            forecast = model.predict(future)
+            
+            # Выбираем только даты из тестовой выборки
+            test_forecast = forecast[forecast['ds'].isin(test_df['ds'])]
+            
+            # Объединяем с фактическими данными
+            merged = test_forecast.merge(test_df, on='ds')
+            
+            # Считаем MAPE
+            mape = mean_absolute_percentage_error(merged['y'], merged['yhat']) * 100
+            
+            return mape
+        
+        # Запускаем оптимизацию
+        study = optuna.create_study(direction='minimize')
+        study.optimize(objective, n_trials=n_trials)
+        
+        # Лучшие параметры
+        best_params = study.best_params
+        best_mape = study.best_value
+        
+        # Обновляем параметры
+        params.update(best_params)
+        
+        # Возвращаем лучшие параметры и метрику
+        return {'params': best_params, 'mape': best_mape}
+        
+    def auto_tune_xgboost(self, df_cafe, metric, params, n_trials=50):
+        """Автоматическая настройка гиперпараметров для XGBoost"""
+        # Подготовка признаков
+        df_features = df_cafe.copy()
+        df_features['day_of_week'] = df_features['Дата'].dt.dayofweek
+        df_features['month'] = df_features['Дата'].dt.month
+        df_features['day'] = df_features['Дата'].dt.day
+        df_features['is_weekend'] = df_features['day_of_week'].isin([5, 6]).astype(int)
+        
+        # Создаем лаговые признаки
+        for lag in [1, 7, 14, 30]:
+            df_features[f'lag_{lag}'] = df_features[metric].shift(lag)
+            
+        df_features = df_features.dropna()
+        
+        # Определяем признаки
+        features = ['day_of_week', 'month', 'day', 'is_weekend'] + [f'lag_{i}' for i in [1, 7, 14, 30]]
+        
+        # Доля обучающей выборки
+        train_split = params.get('train_split', 0.8)
+        train_size = int(len(df_features) * train_split)
+        
+        X = df_features[features]
+        y = df_features[metric]
+        X_train, y_train = X[:train_size], y[:train_size]
+        X_test, y_test = X[train_size:], y[train_size:]
+        
+        def objective(trial):
+            # Гиперпараметры для оптимизации
+            n_estimators = trial.suggest_int('n_estimators', 50, 500)
+            max_depth = trial.suggest_int('max_depth', 3, 10)
+            learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3, log=True)
+            subsample = trial.suggest_float('subsample', 0.6, 1.0)
+            colsample_bytree = trial.suggest_float('colsample_bytree', 0.6, 1.0)
+            
+            # Обучение модели
+            model = xgb.XGBRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                learning_rate=learning_rate,
+                subsample=subsample,
+                colsample_bytree=colsample_bytree,
+                random_state=42
+            )
+            
+            model.fit(X_train, y_train)
+            
+            # Прогноз и метрика
+            y_pred = model.predict(X_test)
+            mape = mean_absolute_percentage_error(y_test, y_pred) * 100
+            
+            return mape
+            
+        # Запускаем оптимизацию
+        study = optuna.create_study(direction='minimize')
+        study.optimize(objective, n_trials=n_trials)
+        
+        # Лучшие параметры
+        best_params = study.best_params
+        best_mape = study.best_value
+        
+        # Обновляем параметры для модели
+        params.update({
+            'xgb_n_estimators': best_params['n_estimators'],
+            'xgb_max_depth': best_params['max_depth'],
+            'xgb_learning_rate': best_params['learning_rate'],
+            'xgb_subsample': best_params['subsample'],
+            'xgb_colsample_bytree': best_params['colsample_bytree']
+        })
+        
+        return {'params': best_params, 'mape': best_mape}
+        
+    def auto_tune_arima(self, df_cafe, metric, params, n_trials=30):
+        """Автоматическая настройка гиперпараметров для ARIMA"""
+        data = df_cafe.set_index('Дата')[metric]
+        
+        # Доля обучающей выборки
+        train_split = params.get('train_split', 0.8)
+        train_size = int(len(data) * train_split)
+        train_data = data[:train_size]
+        test_data = data[train_size:]
+        
+        def objective(trial):
+            # Гиперпараметры для оптимизации
+            p = trial.suggest_int('p', 0, 5)
+            d = trial.suggest_int('d', 0, 2)
+            q = trial.suggest_int('q', 0, 5)
+            
+            # Проверка на допустимость комбинации параметров
+            if p == 0 and d == 0 and q == 0:
+                return float('inf')
+                
+            try:
+                # Обучение модели
+                model = ARIMA(train_data, order=(p, d, q))
+                model_fit = model.fit()
+                
+                # Прогноз
+                forecast = model_fit.forecast(steps=len(test_data))
+                
+                # Метрика
+                mape = mean_absolute_percentage_error(test_data, forecast) * 100
+                return mape
+            except:
+                return float('inf')
+                
+        # Запускаем оптимизацию
+        study = optuna.create_study(direction='minimize')
+        study.optimize(objective, n_trials=n_trials)
+        
+        # Лучшие параметры
+        best_params = study.best_params
+        best_mape = study.best_value
+        
+        # Обновляем параметры
+        params.update({
+            'arima_p': best_params['p'],
+            'arima_d': best_params['d'],
+            'arima_q': best_params['q']
+        })
+        
+        return {'params': best_params, 'mape': best_mape}
+        
+    def auto_tune_lstm(self, df_cafe, metric, params, n_trials=20):
+        """Автоматическая настройка гиперпараметров для LSTM"""
+        # Нормализация данных
+        scaler = StandardScaler()
+        data = df_cafe[metric].values.reshape(-1, 1)
+        scaled_data = scaler.fit_transform(data)
+        
+        # Параметры
+        lookback = params.get('lstm_lookback', 30)
+        
+        # Подготовка данных
+        X, y = self.prepare_time_series_data(df_cafe, metric, lookback)
+        X = X.reshape(X.shape[0], X.shape[1], 1)
+        
+        # Доля обучающей выборки
+        train_split = params.get('train_split', 0.8)
+        train_size = int(len(X) * train_split)
+        
+        X_train, y_train = torch.FloatTensor(X[:train_size]), torch.FloatTensor(y[:train_size])
+        X_test, y_test = torch.FloatTensor(X[train_size:]), torch.FloatTensor(y[train_size:])
+        
+        def objective(trial):
+            # Гиперпараметры для оптимизации
+            hidden_size = trial.suggest_int('hidden_size', 10, 100)
+            num_layers = trial.suggest_int('num_layers', 1, 3)
+            learning_rate = trial.suggest_float('learning_rate', 1e-4, 1e-2, log=True)
+            batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
+            
+            # Создание модели
+            model = LSTMModel(
+                input_size=1,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                output_size=1
+            )
+            
+            # Обучение
+            criterion = nn.MSELoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            
+            dataset = TensorDataset(X_train, y_train)
+            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            
+            # Уменьшаем количество эпох для оптимизации времени
+            epochs = 20
+            
+            for epoch in range(epochs):
+                for batch_X, batch_y in dataloader:
+                    optimizer.zero_grad()
+                    outputs = model(batch_X)
+                    loss = criterion(outputs.squeeze(), batch_y)
+                    loss.backward()
+                    optimizer.step()
+            
+            # Оценка на тестовых данных
+            model.eval()
+            with torch.no_grad():
+                y_pred = model(X_test).squeeze().numpy()
+                mape = mean_absolute_percentage_error(y_test.numpy(), y_pred) * 100
+                
+            return mape
+            
+        # Запускаем оптимизацию
+        study = optuna.create_study(direction='minimize')
+        study.optimize(objective, n_trials=n_trials)
+        
+        # Лучшие параметры
+        best_params = study.best_params
+        best_mape = study.best_value
+        
+        # Обновляем параметры
+        params.update({
+            'lstm_hidden_size': best_params['hidden_size'],
+            'lstm_num_layers': best_params['num_layers'],
+            'lstm_learning_rate': best_params['learning_rate'],
+            'lstm_batch_size': best_params['batch_size']
+        })
+        
+        return {'params': best_params, 'mape': best_mape}
 
     def remove_outliers(self, df_cafe, column, multiplier=1.5):
         """Удаление выбросов"""
@@ -402,6 +670,67 @@ class ForecastEngine:
             # Выбор модели для прогнозирования
             model_type = params.get('model_type', 'prophet')
 
+            # Автоматическая настройка гиперпараметров, если включена
+            if params.get('auto_tune', False):
+                # Словарь функций автонастройки для разных моделей
+                auto_tune_functions = {
+                    'prophet': self.auto_tune_prophet,
+                    'arima': self.auto_tune_arima,
+                    'xgboost': self.auto_tune_xgboost,
+                    'lstm': self.auto_tune_lstm
+                }
+                
+                # Выбираем нужную функцию автонастройки
+                auto_tune_func = auto_tune_functions.get(model_type)
+                
+                if auto_tune_func:
+                    # Число попыток оптимизации зависит от размера данных
+                    n_trials = 20 if len(df_cafe) < 365 else 50
+                    
+                    # Обновляем параметры в progress_queue, если есть функция обратного вызова
+                    progress_message = f"Автонастройка параметров для {cafe}, модель {model_type}..."
+                    progress_queue.put({
+                        'message': progress_message,
+                        'status': 'auto_tuning'
+                    })
+                    
+                    # Запускаем автонастройку для трафика
+                    traffic_tuning = auto_tune_func(df_cafe, 'Тр', params.copy(), n_trials)
+                    
+                    # Обновляем сообщение о прогрессе
+                    progress_message = f"Лучшая MAPE для трафика: {traffic_tuning['mape']:.2f}%"
+                    progress_queue.put({
+                        'message': progress_message,
+                        'status': 'auto_tuning'
+                    })
+                    
+                    # Запускаем автонастройку для среднего чека
+                    check_tuning = auto_tune_func(df_cafe, 'Чек', params.copy(), n_trials)
+                    
+                    # Обновляем сообщение о прогрессе
+                    progress_message = f"Лучшая MAPE для среднего чека: {check_tuning['mape']:.2f}%"
+                    progress_queue.put({
+                        'message': progress_message,
+                        'status': 'auto_tuning'
+                    })
+                    
+                    # Объединяем лучшие параметры из обеих автонастроек
+                    # В случае конфликта приоритет отдаем параметрам с лучшей метрикой
+                    if traffic_tuning['mape'] < check_tuning['mape']:
+                        params.update(traffic_tuning['params'])
+                    else:
+                        params.update(check_tuning['params'])
+                    
+                    # Сохраняем лучшие метрики
+                    if 'auto_tune_metrics' not in metrics_cache:
+                        metrics_cache['auto_tune_metrics'] = {}
+                    
+                    metrics_cache['auto_tune_metrics'][cafe] = {
+                        'traffic_mape': traffic_tuning['mape'],
+                        'check_mape': check_tuning['mape'],
+                        'params': params
+                    }
+    
             # Словарь с функциями прогнозирования
             forecast_functions = {
                 'prophet': self.forecast_prophet,
@@ -576,7 +905,8 @@ def get_initial_data():
             'daily_seasonality': False,
             'model_type': 'prophet',
             'confidence_interval': 0.95,
-            'train_split': 0.8
+            'train_split': 0.8,
+            'auto_tune': False
         }
     })
 
@@ -781,10 +1111,22 @@ def get_forecast_data():
             if cafe in metrics_cache:
                 metrics[cafe] = metrics_cache[cafe]
 
+        # Добавляем метрики автонастройки, если они есть
+        auto_tune_metrics = {}
+        if 'auto_tune_metrics' in metrics_cache:
+            for cafe in df['cafe'].unique():
+                if cafe in metrics_cache['auto_tune_metrics']:
+                    auto_tune_metrics[cafe] = {
+                        'traffic_mape': round(metrics_cache['auto_tune_metrics'][cafe]['traffic_mape'], 2),
+                        'check_mape': round(metrics_cache['auto_tune_metrics'][cafe]['check_mape'], 2)
+                    }
+
         return jsonify({
             'data': traces,
             'layout': layout,
-            'metrics': metrics
+            'metrics': metrics,
+            'auto_tune_metrics': auto_tune_metrics,
+            'params': forecast_params
         })
 
     except Exception as e:

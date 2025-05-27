@@ -323,6 +323,27 @@
                             <i class="bi bi-gear"></i> Расширенные настройки
                         </h5>
 
+                        <div class="form-check form-switch mb-4">
+                            <input class="form-check-input" type="checkbox" id="autoTune">
+                            <label class="form-check-label" for="autoTune">
+                                Автоматическая настройка гиперпараметров
+                            </label>
+                            <small class="form-text text-muted d-block mt-1">
+                                Использует Optuna для поиска оптимальных параметров модели
+                            </small>
+                        </div>
+                        
+                        <div class="slider-container mb-4">
+                            <div class="slider-label">
+                                <span>Доля обучающей выборки (%)</span>
+                                <span class="slider-value" id="trainSplitValue">80</span>
+                            </div>
+                            <input type="range" id="trainSplit" min="50" max="90" value="80" step="5">
+                            <small class="form-text text-muted d-block mt-1">
+                                Часть данных, используемая для обучения модели (50-90%)
+                            </small>
+                        </div>
+                    
                         <div class="mb-4">
                             <label for="modelType" class="form-label">Модель прогнозирования</label>
                             <select class="form-select" id="modelType">
@@ -573,6 +594,32 @@
                     $('#dailySeasonality').prop('checked', data.default_params.daily_seasonality);
                 }
 
+                // Добавляем метрики автонастройки, если они есть
+                if (data.auto_tune_metrics && Object.keys(data.auto_tune_metrics).length > 0) {
+                    metricsHtml += '<h5 class="mt-4 mb-3">Результаты автонастройки</h5>';
+                    metricsHtml += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+                    metricsHtml += '<thead><tr><th>Кафе</th><th>MAPE трафика (%)</th><th>MAPE среднего чека (%)</th></tr></thead><tbody>';
+                
+                    for (const cafe in data.auto_tune_metrics) {
+                        const metrics = data.auto_tune_metrics[cafe];
+                        metricsHtml += `<tr>
+                            <td>${cafe}</td>
+                            <td>${metrics.traffic_mape.toFixed(2)}%</td>
+                            <td>${metrics.check_mape.toFixed(2)}%</td>
+                        </tr>`;
+                    }
+                
+                    metricsHtml += '</tbody></table></div>';
+                    
+                    // Выводим информацию об использованных параметрах
+                    if (data.params && data.params.auto_tune) {
+                        metricsHtml += '<div class="alert alert-info mt-3">';
+                        metricsHtml += '<i class="bi bi-info-circle-fill me-2"></i>';
+                        metricsHtml += 'Для прогноза использованы оптимальные параметры, найденные автоматически';
+                        metricsHtml += '</div>';
+                    }
+                }
+                
             }).fail(function(error) {
                 console.error('Ошибка загрузки данных:', error);
                 alert('Ошибка загрузки данных. Проверьте подключение к серверу.');
@@ -659,6 +706,10 @@
             // Выбрать/снять все
             $('#selectAll').click(function() {
                 $('.cafe-select').prop('checked', true);
+            });
+            
+            $("#trainSplit").on("input", function() {
+                $("#trainSplitValue").text($(this).val());
             });
 
             $('#deselectAll').click(function() {
@@ -801,6 +852,9 @@
                         });
                         
                         $("#metricsContainer").removeClass("d-none");
+                    } else if (response.status === 'auto_tuning') {
+                        // Автонастройка гиперпараметров
+                        $("#progressMessage").html(`<i class="bi bi-gear-fill me-2"></i>${response.message || "Выполняется автонастройка..."}`);
                     } else {
                         $("#metricsContainer").addClass("d-none");
                     }
