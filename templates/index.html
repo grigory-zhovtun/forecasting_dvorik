@@ -592,6 +592,8 @@
         let cafes = [];
         let adjustments = [];
         let forecastData = null;
+        let preservedDateFrom = null; // For preserving date range across forecasts
+        let preservedDateTo = null;   // For preserving date range across forecasts
 
         // Инициализация
         $(document).ready(function() {
@@ -853,6 +855,10 @@
 
         // Запуск прогнозирования
         function runForecast() {
+            // Preserve current date filter values before running the forecast
+            preservedDateFrom = $('#dateFrom').val();
+            preservedDateTo = $('#dateTo').val();
+
             const selectedCafes = $('.cafe-select:checked').map(function() {
                 return $(this).val();
             }).get();
@@ -934,7 +940,8 @@
                         clearInterval(interval);
                         $('#progressContainer').hide();
                         $('#runForecast').prop('disabled', false);
-                        loadForecastResults();
+                        // Load results with the preserved date range
+                        loadForecastResults(preservedDateFrom, preservedDateTo); 
                     } else if (data.percentage !== undefined) {
                         $('#progressBar').css('width', data.percentage + '%');
                         $('#progressText').text(data.percentage + '%');
@@ -950,14 +957,37 @@
         }
 
         // Загрузка результатов прогноза
-        function loadForecastResults() {
+        // requestDateFrom and requestDateTo are optional parameters for preserving user selection if needed in future.
+        // For now, if they are undefined (e.g. after initial forecast), we default to current month.
+        function loadForecastResults(requestDateFrom, requestDateTo) {
             console.log('Загрузка результатов прогноза...');
             $('#dateFilter').show();
             $('#exportExcel').show();
             $('.loading-spinner').show();
             $('#chartContainer').html('<div id="plotlyChart"></div>'); // Очистка перед загрузкой нового графика
 
-            $.get('/api/get_forecast_data', function(response) {
+            // Set date range: use preserved if available, otherwise default to current month
+            if (requestDateFrom && requestDateTo && requestDateFrom !== "" && requestDateTo !== "") {
+                $('#dateFrom').val(requestDateFrom);
+                $('#dateTo').val(requestDateTo);
+            } else {
+                // Default to current month if no valid preserved dates are passed
+                const today = new Date();
+                const firstDayCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+                const lastDayCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+                
+                $('#dateFrom').val(firstDayCurrentMonth);
+                $('#dateTo').val(lastDayCurrentMonth);
+            }
+
+            // Existing logic to build URL will now use the potentially defaulted dates from the input fields
+            const dateFrom = $('#dateFrom').val();
+            const dateTo = $('#dateTo').val();
+            let url = '/api/get_forecast_data?';
+            if (dateFrom) url += `date_from=${dateFrom}&`;
+            if (dateTo) url += `date_to=${dateTo}&`;
+
+            $.get(url, function(response) {
                 console.log('Получены данные для графика:', response);
                 $('.loading-spinner').hide();
 
