@@ -828,20 +828,32 @@ class ForecastEngine:
 
             # Применение корректировок
             if 'adjustments' in params and params['adjustments']:
+                adjusted_rows_mask = pd.Series(False, index=result.index) # Keep track of adjusted rows
+
                 for adj in params['adjustments']:
                     if adj['cafe'] == cafe or adj['cafe'] == 'ALL':
                         date_from = pd.to_datetime(adj['date_from'])
                         date_to = pd.to_datetime(adj['date_to'])
-                        mask = (result['ds'] >= date_from) & (result['ds'] <= date_to)
+                        current_adj_mask = (result['ds'] >= date_from) & (result['ds'] <= date_to)
 
-                        if adj['metric'] in ['traffic', 'both']:
-                            result.loc[mask, 'traffic_forecast'] *= adj['coefficient']
+                        if adj['metric'] == 'traffic':
+                            result.loc[current_adj_mask, 'traffic_forecast'] *= adj['coefficient']
+                        elif adj['metric'] == 'check':
+                            result.loc[current_adj_mask, 'check_forecast'] *= adj['coefficient']
+                        elif adj['metric'] == 'both':
+                            result.loc[current_adj_mask, 'traffic_forecast'] *= adj['coefficient']
+                            result.loc[current_adj_mask, 'check_forecast'] *= adj['coefficient']
+                        
+                        adjusted_rows_mask |= current_adj_mask # Accumulate masks of adjusted rows
 
-                        if adj['metric'] in ['check', 'both']:
-                            result.loc[mask, 'check_forecast'] *= adj['coefficient']
-
-                        if adj['metric'] == 'both':
-                            result.loc[mask, 'revenue_forecast'] *= adj['coefficient']
+                # Recalculate revenue for rows that were affected by any adjustment
+                if adjusted_rows_mask.any():
+                    result.loc[adjusted_rows_mask, 'revenue_forecast'] = result.loc[adjusted_rows_mask, 'traffic_forecast'] * result.loc[adjusted_rows_mask, 'check_forecast']
+                    # Recalculate revenue bounds as well, using their original components.
+                    # Assuming traffic_lower/upper and check_lower/upper are not directly adjusted by coefficient.
+                    # If they were, that logic would need to be added above similar to forecasts.
+                    result.loc[adjusted_rows_mask, 'revenue_lower'] = result.loc[adjusted_rows_mask, 'traffic_lower'] * result.loc[adjusted_rows_mask, 'check_lower']
+                    result.loc[adjusted_rows_mask, 'revenue_upper'] = result.loc[adjusted_rows_mask, 'traffic_upper'] * result.loc[adjusted_rows_mask, 'check_upper']
 
             # Расчет метрик качества для исторических данных
             historical_mask = result['revenue_fact'].notna()
@@ -1029,19 +1041,39 @@ def get_forecast_data():
             })
 
         # Фильтрация по датам
-        date_from = request.args.get('date_from')
-        date_to = request.args.get('date_to')
+        # Get dates from request arguments
+        req_date_from = request.args.get('date_from')
+        req_date_to = request.args.get('date_to')
 
-        # Если даты не переданы в запросе, но есть в параметрах прогноза
-        if not date_from and 'date_filter_from' in forecast_params:
-            date_from = forecast_params['date_filter_from']
-        if not date_to and 'date_filter_to' in forecast_params:
-            date_to = forecast_params['date_filter_to']
+        # Get dates from forecast_params (cached display filters)
+        # forecast_params is already defined above as forecast_cache.get('params', {})
+        cached_date_from = forecast_params.get('date_filter_from')
+        cached_date_to = forecast_params.get('date_filter_to')
 
-        if date_from:
-            df = df[df['ds'] >= pd.to_datetime(date_from)]
-        if date_to:
-            df = df[df['ds'] <= pd.to_datetime(date_to)]
+        # Determine effective dates: prioritize request args, then cached, then default to current month
+        effective_date_from = req_date_from if req_date_from else cached_date_from
+        effective_date_to = req_date_to if req_date_to else cached_date_to
+
+        if not effective_date_from and not effective_date_to:
+            # If no dates from request or cache, default to current month
+            today = datetime.now()
+            effective_date_from = today.replace(day=1).strftime('%Y-%m-%d')
+            
+            # Calculate last day of current month
+            # Move to a day near the end of the month (e.g., 28th) to safely add days
+            # then go to the 1st of next month, then subtract one day.
+            next_month_start = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+            last_day_of_current_month = next_month_start - timedelta(days=1)
+            effective_date_to = last_day_of_current_month.strftime('%Y-%m-%d')
+            
+            # Note: We are not updating forecast_cache['params'] with these defaults here,
+            # as the cache should ideally reflect explicit user choices or forecast run params.
+
+        # Apply filters using the determined effective dates
+        if effective_date_from:
+            df = df[df['ds'] >= pd.to_datetime(effective_date_from)]
+        if effective_date_to:
+            df = df[df['ds'] <= pd.to_datetime(effective_date_to)]
 
         # Преобразование в формат для Plotly
         traces = []
