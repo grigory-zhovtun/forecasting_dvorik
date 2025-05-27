@@ -1,5 +1,6 @@
 """
 Веб-приложение для прогнозирования выручки сети кафе "Пироговый Дворик"
+Версия 2.0 - с поддержкой множественных моделей
 """
 
 from flask import Flask, render_template, jsonify, request, send_file
@@ -20,6 +21,13 @@ import threading
 import queue
 import time
 import tempfile
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error
+import xgboost as xgb
+from sklearn.preprocessing import StandardScaler
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
 
 warnings.filterwarnings('ignore')
 logging.getLogger('prophet').setLevel(logging.WARNING)
@@ -31,6 +39,23 @@ data_cache = {}
 forecast_cache = {}
 progress_queue = queue.Queue()
 current_task = None
+metrics_cache = {}
+
+# LSTM модель для временных рядов
+class LSTMModel(nn.Module):
+    def __init__(self, input_size=1, hidden_size=50, num_layers=2, output_size=1):
+        super(LSTMModel, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        out, _ = self.lstm(x, (h0, c0))
+        out = self.fc(out[:, -1, :])
+        return out
 
 
 class ForecastEngine:
@@ -101,6 +126,256 @@ class ForecastEngine:
 
         return df_cafe[(df_cafe[column] >= lower_bound) & (df_cafe[column] <= upper_bound)]
 
+    def calculate_metrics(self, y_true, y_pred):
+        """Расчет метрик качества прогноза"""
+        # Удаляем NaN значения для корректного расчета
+        mask = ~np.isnan(y_true) & ~np.isnan(y_pred)
+        y_true = y_true[mask]
+        y_pred = y_pred[mask]
+
+        if len(y_true) == 0:
+            return {'MAPE': None, 'RMSE': None}
+
+        mape = mean_absolute_percentage_error(y_true, y_pred) * 100
+        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+
+        return {
+            'MAPE': round(mape, 2),
+            'RMSE': round(rmse, 2)
+        }
+
+    def prepare_time_series_data(self, df_cafe, column, lookback=30):
+        """Подготовка данных для моделей временных рядов"""
+        data = df_cafe[column].values
+        X, y = [], []
+
+        for i in range(lookback, len(data)):
+            X.append(data[i-lookback:i])
+            y.append(data[i])
+
+        return np.array(X), np.array(y)
+
+    def forecast_prophet(self, df_cafe, metric, params):
+        """Прогнозирование с помощью Prophet"""
+        df_model = df_cafe[['Дата', metric]].rename(columns={'Дата': 'ds', metric: 'y'})
+
+        m = Prophet(
+            holidays=self.holidays,
+            changepoint_prior_scale=params.get('changepoint_prior_scale', 0.05),
+            seasonality_prior_scale=params.get('seasonality_prior_scale', 10.0),
+            yearly_seasonality=params.get('yearly_seasonality', True),
+            weekly_seasonality=params.get('weekly_seasonality', True),
+            daily_seasonality=params.get('daily_seasonality', False),
+            interval_width=params.get('confidence_interval', 0.95)
+        )
+
+        m.fit(df_model)
+
+        future = m.make_future_dataframe(periods=params.get('forecast_horizon', 365))
+        forecast = m.predict(future)
+
+        return forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+
+    def forecast_arima(self, df_cafe, metric, params):
+        """Прогнозирование с помощью ARIMA"""
+        data = df_cafe.set_index('Дата')[metric]
+
+        # Параметры ARIMA (можно сделать настраиваемыми)
+        order = (params.get('arima_p', 2), params.get('arima_d', 1), params.get('arima_q', 2))
+
+        model = ARIMA(data, order=order)
+        model_fit = model.fit()
+
+        # Прогноз
+        forecast_steps = params.get('forecast_horizon', 365)
+        forecast = model_fit.forecast(steps=forecast_steps)
+
+        # Создаем даты для прогноза
+        last_date = df_cafe['Дата'].max()
+        future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=forecast_steps)
+
+        # Создаем DataFrame с прогнозом
+        forecast_df = pd.DataFrame({
+            'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
+            'yhat': pd.concat([pd.Series(data.values), forecast])
+        })
+
+        # Добавляем доверительные интервалы (упрощенно)
+        confidence = params.get('confidence_interval', 0.95)
+        z_score = 1.96 if confidence == 0.95 else 2.58  # для 95% и 99%
+        std_error = np.std(model_fit.resid)
+
+        forecast_df['yhat_lower'] = forecast_df['yhat'] - z_score * std_error
+        forecast_df['yhat_upper'] = forecast_df['yhat'] + z_score * std_error
+
+        return forecast_df
+
+    def forecast_xgboost(self, df_cafe, metric, params):
+        """Прогнозирование с помощью XGBoost"""
+        # Подготовка признаков
+        df_features = df_cafe.copy()
+        df_features['day_of_week'] = df_features['Дата'].dt.dayofweek
+        df_features['month'] = df_features['Дата'].dt.month
+        df_features['day'] = df_features['Дата'].dt.day
+        df_features['is_weekend'] = df_features['day_of_week'].isin([5, 6]).astype(int)
+
+        # Создаем лаговые признаки
+        for lag in [1, 7, 14, 30]:
+            df_features[f'lag_{lag}'] = df_features[metric].shift(lag)
+
+        df_features = df_features.dropna()
+
+        # Разделение на обучающую и тестовую выборки
+        train_size = int(len(df_features) * params.get('train_split', 0.8))
+        train = df_features[:train_size]
+
+        features = ['day_of_week', 'month', 'day', 'is_weekend'] + [f'lag_{i}' for i in [1, 7, 14, 30]]
+
+        X_train = train[features]
+        y_train = train[metric]
+
+        # Обучение модели
+        model = xgb.XGBRegressor(
+            n_estimators=params.get('xgb_n_estimators', 100),
+            max_depth=params.get('xgb_max_depth', 5),
+            learning_rate=params.get('xgb_learning_rate', 0.1),
+            random_state=42
+        )
+
+        model.fit(X_train, y_train)
+
+        # Прогнозирование
+        last_date = df_cafe['Дата'].max()
+        forecast_dates = pd.date_range(start=last_date + timedelta(days=1),
+                                     periods=params.get('forecast_horizon', 365))
+
+        # Создаем будущие признаки
+        future_df = pd.DataFrame({'Дата': forecast_dates})
+        future_df['day_of_week'] = future_df['Дата'].dt.dayofweek
+        future_df['month'] = future_df['Дата'].dt.month
+        future_df['day'] = future_df['Дата'].dt.day
+        future_df['is_weekend'] = future_df['day_of_week'].isin([5, 6]).astype(int)
+
+        # Для прогноза используем последние известные значения для лагов
+        last_values = df_features[metric].tail(30).values
+        predictions = []
+
+        for i in range(len(future_df)):
+            # Создаем лаговые признаки из последних предсказаний
+            lags = {}
+            for lag in [1, 7, 14, 30]:
+                if i >= lag:
+                    lags[f'lag_{lag}'] = predictions[i-lag]
+                else:
+                    if len(last_values) >= lag - i:
+                        lags[f'lag_{lag}'] = last_values[-(lag-i)]
+                    else:
+                        lags[f'lag_{lag}'] = np.mean(last_values)
+
+            X_pred = pd.DataFrame([{
+                **future_df.iloc[i][features[:4]].to_dict(),
+                **lags
+            }])
+
+            pred = model.predict(X_pred)[0]
+            predictions.append(pred)
+
+        # Объединяем исторические и прогнозные данные
+        forecast_df = pd.DataFrame({
+            'ds': pd.concat([df_cafe['Дата'], future_df['Дата']]),
+            'yhat': pd.concat([df_cafe[metric], pd.Series(predictions)])
+        })
+
+        # Добавляем доверительные интервалы
+        std_error = np.std(y_train - model.predict(X_train))
+        confidence = params.get('confidence_interval', 0.95)
+        z_score = 1.96 if confidence == 0.95 else 2.58
+
+        forecast_df['yhat_lower'] = forecast_df['yhat'] - z_score * std_error
+        forecast_df['yhat_upper'] = forecast_df['yhat'] + z_score * std_error
+
+        return forecast_df
+
+    def forecast_lstm(self, df_cafe, metric, params):
+        """Прогнозирование с помощью LSTM"""
+        # Нормализация данных
+        scaler = StandardScaler()
+        data = df_cafe[metric].values.reshape(-1, 1)
+        scaled_data = scaler.fit_transform(data)
+
+        # Параметры
+        lookback = params.get('lstm_lookback', 30)
+        train_size = int(len(scaled_data) * params.get('train_split', 0.8))
+
+        # Подготовка данных
+        X, y = self.prepare_time_series_data(df_cafe, metric, lookback)
+        X = X.reshape(X.shape[0], X.shape[1], 1)
+
+        # Разделение на обучающую и тестовую выборки
+        X_train = torch.FloatTensor(X[:train_size])
+        y_train = torch.FloatTensor(y[:train_size])
+
+        # Создание модели
+        model = LSTMModel(
+            input_size=1,
+            hidden_size=params.get('lstm_hidden_size', 50),
+            num_layers=params.get('lstm_num_layers', 2),
+            output_size=1
+        )
+
+        # Обучение
+        criterion = nn.MSELoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=params.get('lstm_learning_rate', 0.001))
+
+        dataset = TensorDataset(X_train, y_train)
+        dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+        epochs = params.get('lstm_epochs', 50)
+        for epoch in range(epochs):
+            for batch_X, batch_y in dataloader:
+                optimizer.zero_grad()
+                outputs = model(batch_X)
+                loss = criterion(outputs.squeeze(), batch_y)
+                loss.backward()
+                optimizer.step()
+
+        # Прогнозирование
+        model.eval()
+        with torch.no_grad():
+            # Прогноз на будущее
+            last_sequence = torch.FloatTensor(scaled_data[-lookback:].reshape(1, lookback, 1))
+            predictions = []
+
+            for _ in range(params.get('forecast_horizon', 365)):
+                pred = model(last_sequence)
+                predictions.append(pred.item())
+
+                # Обновляем последовательность
+                new_sequence = torch.cat([last_sequence[:, 1:, :], pred.reshape(1, 1, 1)], dim=1)
+                last_sequence = new_sequence
+
+        # Денормализация
+        predictions = scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).flatten()
+
+        # Создаем DataFrame с результатами
+        last_date = df_cafe['Дата'].max()
+        future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=len(predictions))
+
+        forecast_df = pd.DataFrame({
+            'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
+            'yhat': pd.concat([df_cafe[metric], pd.Series(predictions)])
+        })
+
+        # Добавляем доверительные интервалы
+        std_error = np.std(data.flatten())
+        confidence = params.get('confidence_interval', 0.95)
+        z_score = 1.96 if confidence == 0.95 else 2.58
+
+        forecast_df['yhat_lower'] = forecast_df['yhat'] - z_score * std_error * 0.1
+        forecast_df['yhat_upper'] = forecast_df['yhat'] + z_score * std_error * 0.1
+
+        return forecast_df
+
     def forecast_cafe(self, cafe, params):
         """Прогнозирование для одного кафе"""
         try:
@@ -124,43 +399,24 @@ class ForecastEngine:
             df_cafe['Чек'] = df_cafe['Чек'].fillna(df_cafe['Чек'].mean())
             df_cafe['Выручка'] = df_cafe['Тр'] * df_cafe['Чек']
 
+            # Выбор модели для прогнозирования
+            model_type = params.get('model_type', 'prophet')
+
+            # Словарь с функциями прогнозирования
+            forecast_functions = {
+                'prophet': self.forecast_prophet,
+                'arima': self.forecast_arima,
+                'xgboost': self.forecast_xgboost,
+                'lstm': self.forecast_lstm
+            }
+
+            forecast_func = forecast_functions.get(model_type, self.forecast_prophet)
+
             # Прогнозирование трафика
-            df_traffic = df_cafe[['Дата', 'Тр']].rename(columns={'Дата': 'ds', 'Тр': 'y'})
-
-            m_traffic = Prophet(
-                holidays=self.holidays,
-                changepoint_prior_scale=params.get('changepoint_prior_scale', 0.05),
-                seasonality_prior_scale=params.get('seasonality_prior_scale', 10.0),
-                yearly_seasonality=params.get('yearly_seasonality', True),
-                weekly_seasonality=params.get('weekly_seasonality', True),
-                daily_seasonality=params.get('daily_seasonality', False)
-            )
-
-            m_traffic.fit(df_traffic)
-
-            future_traffic = m_traffic.make_future_dataframe(
-                periods=params.get('forecast_horizon', 365)
-            )
-            forecast_traffic = m_traffic.predict(future_traffic)
+            forecast_traffic = forecast_func(df_cafe, 'Тр', params)
 
             # Прогнозирование среднего чека
-            df_check = df_cafe[['Дата', 'Чек']].rename(columns={'Дата': 'ds', 'Чек': 'y'})
-
-            m_check = Prophet(
-                holidays=self.holidays,
-                changepoint_prior_scale=params.get('changepoint_prior_scale', 0.05),
-                seasonality_prior_scale=params.get('seasonality_prior_scale', 10.0),
-                yearly_seasonality=params.get('yearly_seasonality', True),
-                weekly_seasonality=params.get('weekly_seasonality', True),
-                daily_seasonality=False
-            )
-
-            m_check.fit(df_check)
-
-            future_check = m_check.make_future_dataframe(
-                periods=params.get('forecast_horizon', 365)
-            )
-            forecast_check = m_check.predict(future_check)
+            forecast_check = forecast_func(df_cafe, 'Чек', params)
 
             # Объединение результатов
             result = pd.DataFrame({
@@ -209,10 +465,21 @@ class ForecastEngine:
                         if adj['metric'] == 'both':
                             result.loc[mask, 'revenue_forecast'] *= adj['coefficient']
 
+            # Расчет метрик качества для исторических данных
+            historical_mask = result['revenue_fact'].notna()
+            if historical_mask.sum() > 0:
+                metrics = self.calculate_metrics(
+                    result.loc[historical_mask, 'revenue_fact'].values,
+                    result.loc[historical_mask, 'revenue_forecast'].values
+                )
+                metrics_cache[cafe] = metrics
+
             return result
 
         except Exception as e:
             print(f"Ошибка прогнозирования для {cafe}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def forecast_all(self, cafes, params, progress_callback=None):
@@ -306,7 +573,10 @@ def get_initial_data():
             'remove_outliers': True,
             'yearly_seasonality': True,
             'weekly_seasonality': True,
-            'daily_seasonality': False
+            'daily_seasonality': False,
+            'model_type': 'prophet',
+            'confidence_interval': 0.95,
+            'train_split': 0.8
         }
     })
 
@@ -322,6 +592,13 @@ def forecast():
     if not selected_cafes:
         return jsonify({'error': 'Не выбрано ни одного кафе'}), 400
 
+    # Очищаем очередь прогресса
+    while not progress_queue.empty():
+        try:
+            progress_queue.get_nowait()
+        except:
+            break
+
     # Запуск прогнозирования в отдельном потоке
     def run_forecast():
         def progress_callback(current, total, message):
@@ -334,6 +611,7 @@ def forecast():
 
         result = engine.forecast_all(selected_cafes, params, progress_callback)
         forecast_cache['latest'] = result
+        forecast_cache['params'] = params  # Сохраняем параметры для фильтрации
         progress_queue.put({'status': 'complete'})
 
     current_task = threading.Thread(target=run_forecast)
@@ -361,6 +639,9 @@ def get_forecast_data():
 
         df = forecast_cache['latest'].copy()
 
+        # Получаем параметры прогноза
+        forecast_params = forecast_cache.get('params', {})
+
         # Проверка наличия данных
         if df.empty:
             return jsonify({
@@ -368,9 +649,15 @@ def get_forecast_data():
                 'layout': {'title': 'Нет данных для отображения'}
             })
 
-        # Фильтрация по датам если указаны
+        # Фильтрация по датам
         date_from = request.args.get('date_from')
         date_to = request.args.get('date_to')
+
+        # Если даты не переданы в запросе, но есть в параметрах прогноза
+        if not date_from and 'date_filter_from' in forecast_params:
+            date_from = forecast_params['date_filter_from']
+        if not date_to and 'date_filter_to' in forecast_params:
+            date_to = forecast_params['date_filter_to']
 
         if date_from:
             df = df[df['ds'] >= pd.to_datetime(date_from)]
@@ -488,9 +775,16 @@ def get_forecast_data():
             }
         }
 
+        # Добавляем метрики качества
+        metrics = {}
+        for cafe in df['cafe'].unique():
+            if cafe in metrics_cache:
+                metrics[cafe] = metrics_cache[cafe]
+
         return jsonify({
             'data': traces,
-            'layout': layout
+            'layout': layout,
+            'metrics': metrics
         })
 
     except Exception as e:

@@ -323,15 +323,28 @@
                             <i class="bi bi-gear"></i> Расширенные настройки
                         </h5>
 
-                        <div class="slider-container">
+                        <div class="mb-4">
+                            <label for="modelType" class="form-label">Модель прогнозирования</label>
+                            <select class="form-select" id="modelType">
+                                <option value="prophet" selected>Prophet</option>
+                                <option value="arima">ARIMA</option>
+                                <option value="xgboost">XGBoost</option>
+                                <option value="lstm">LSTM (нейронная сеть)</option>
+                            </select>
+                            <small class="text-muted mt-1 d-block">
+                                Выберите алгоритм, который будет использоваться для прогнозирования
+                            </small>
+                        </div>
+                    
+                        <div class="slider-container prophet-setting">
                             <div class="slider-label">
                                 <span>Гибкость тренда</span>
                                 <span class="slider-value" id="trendValue">0.05</span>
                             </div>
                             <input type="range" id="changepointPriorScale" min="0.001" max="0.5" value="0.05" step="0.001">
                         </div>
-
-                        <div class="slider-container">
+                        
+                        <div class="slider-container prophet-setting">
                             <div class="slider-label">
                                 <span>Сила сезонности</span>
                                 <span class="slider-value" id="seasonalityValue">10</span>
@@ -371,6 +384,23 @@
                         <div id="adjustmentsList">
                             </div>
                     </div>
+                                                        
+                                                        <div id="metricsContainer" class="mt-4 d-none">
+                            <h5 class="mb-3">Метрики качества прогноза</h5>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Кафе</th>
+                                            <th>MAPE, %</th>
+                                            <th>RMSE, ₽</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="metricsTable">
+                                    </tbody>
+                                </table>
+                            </div>
+                                                        </div>
 
                     <div class="mt-4 text-center">
                         <button class="btn btn-forecast" id="runForecast">
@@ -464,7 +494,7 @@
                         <label class="form-label">Дата окончания</label>
                         <input type="date" class="form-control" id="adjDateTo">
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-3 prophet-setting">
                         <label class="form-label">Метрика</label>
                         <select class="form-select" id="adjMetric">
                             <option value="both">Выручка</option>
@@ -577,6 +607,28 @@
             select.append('<option value="ALL">Все кафе</option>');
             cafes.forEach(cafe => {
                 select.append(`<option value="${cafe}">${cafe}</option>`);
+            });
+            
+            // Настройка интерфейса в зависимости от выбранной модели
+            $("#modelType").on('change', function() {
+                const modelType = $(this).val();
+                
+                // Показываем/скрываем настройки в зависимости от модели
+                if (modelType === 'prophet') {
+                    $(".prophet-setting").show();
+                } else {
+                    $(".prophet-setting").hide();
+                }
+                
+                // Показываем информацию о выбранной модели
+                const modelInfo = {
+                    'prophet': 'Facebook Prophet - универсальная модель для большинства случаев',
+                    'arima': 'ARIMA - классическая статистическая модель, подходит для стабильных данных',
+                    'xgboost': 'XGBoost - мощная модель машинного обучения, хорошо работает со сложными зависимостями',
+                    'lstm': 'LSTM - нейронная сеть, лучше всего подходит для длинных временных рядов с сезонностью'
+                };
+                
+                $(this).next('small').text(modelInfo[modelType]);
             });
         }
 
@@ -734,6 +786,24 @@
                     console.log('Прогнозирование запущено:', response);
                     // Мониторинг прогресса
                     monitorProgress();
+                    
+                    // Обновляем метрики качества
+                    if (response.metrics && Object.keys(response.metrics).length > 0) {
+                        const metricsTable = $("#metricsTable");
+                        metricsTable.empty();
+                        
+                        Object.entries(response.metrics).forEach(([cafe, metrics]) => {
+                            const row = $("<tr>");
+                            row.append($("<td>").text(cafe));
+                            row.append($("<td>").text(metrics.MAPE ? metrics.MAPE.toFixed(2) + "%" : "N/A"));
+                            row.append($("<td>").text(metrics.RMSE ? metrics.RMSE.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            metricsTable.append(row);
+                        });
+                        
+                        $("#metricsContainer").removeClass("d-none");
+                    } else {
+                        $("#metricsContainer").addClass("d-none");
+                    }
                 },
                 error: function(xhr, status, error) {
                     console.error('Ошибка при запуске прогнозирования:', error);
