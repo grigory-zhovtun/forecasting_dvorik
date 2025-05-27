@@ -30,8 +30,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 import optuna
-import joblib  # For Optuna parallelization
-from pickle import PicklingError  # For joblib exception handling
+import joblib # For Optuna parallelization
+from pickle import PicklingError # For joblib exception handling
 
 warnings.filterwarnings('ignore')
 logging.getLogger('prophet').setLevel(logging.WARNING)
@@ -44,7 +44,6 @@ forecast_cache = {}
 progress_queue = queue.Queue()
 current_task = None
 metrics_cache = {}
-
 
 # LSTM модель для временных рядов
 class LSTMModel(nn.Module):
@@ -97,7 +96,7 @@ class ForecastEngine:
 
     def load_holidays(self):
         """Загрузка праздников"""
-        # Сначала попробуем загрузить пользовательские праздники
+            # Сначала попробуем загрузить пользовательские праздники
         try:
             custom_holidays = pd.read_excel(self.holidays_path)
             print(f"Загружено {len(custom_holidays)} пользовательских праздников из {self.holidays_path}")
@@ -108,7 +107,7 @@ class ForecastEngine:
         # Затем загружаем праздники из нашего предварительно созданного файла
         ru_holidays = pd.DataFrame(columns=['ds', 'holiday'])
         prophet_holidays_file = 'prophet_holidays_2020_2027.csv'
-
+        
         try:
             import os
             if os.path.exists(prophet_holidays_file):
@@ -117,7 +116,7 @@ class ForecastEngine:
                 print(f"Загружено {len(ru_holidays)} российских праздников из файла {prophet_holidays_file}")
             else:
                 print(f"Файл {prophet_holidays_file} не найден, пробуем другие варианты...")
-
+                
                 # Пробуем файл с другим именем
                 alternative_file = 'prophet_holidays_2020_2026.csv'
                 if os.path.exists(alternative_file):
@@ -132,7 +131,7 @@ class ForecastEngine:
                         print(f"Создано {len(ru_holidays)} российских праздников с помощью Prophet")
                     except Exception as prophet_error:
                         print(f"Не удалось создать праздники Prophet: {prophet_error}")
-
+                
         except Exception as e2:
             print(f"Ошибка при загрузке праздников: {e2}")
 
@@ -140,273 +139,549 @@ class ForecastEngine:
         self.holidays = pd.concat([custom_holidays, ru_holidays]).drop_duplicates().reset_index(drop=True)
         print(f"Всего праздников для использования в Prophet: {len(self.holidays)}")
 
+    def classify_cafe(self, cafe):
+        """Классификация кафе"""
+        df_cafe = self.df[self.df['Кафе'] == cafe]
+        unique_days = df_cafe['Дата'].nunique()
 
-def classify_cafe(self, cafe):
-    """Классификация кафе"""
-    df_cafe = self.df[self.df['Кафе'] == cafe]
-    unique_days = df_cafe['Дата'].nunique()
+        if unique_days >= 365:
+            return "mature"
+        elif unique_days >= 180:
+            return "established"
+        elif unique_days >= 90:
+            return "developing"
+        else:
+            return "new"
+            
+    def auto_tune_prophet(self, df_cafe, metric, params, n_trials=50):
+        """Автоматическая настройка гиперпараметров для Prophet"""
+        # Готовим данные
+        df_model = df_cafe[['Дата', metric]].rename(columns={'Дата': 'ds', metric: 'y'})
+        
+        # Доля обучающей выборки
+        train_split = params.get('train_split', 0.8)
+        train_size = int(len(df_model) * train_split)
+        train_df = df_model.iloc[:train_size]
+        test_df = df_model.iloc[train_size:]
+        
+        # Если тестовая выборка слишком маленькая, используем кросс-валидацию
+        if len(test_df) < 30:
+            test_df = df_model.iloc[-30:]
+            
+        # Функция цели для оптимизации
+        def objective(trial):
+            # Гиперпараметры для оптимизации
+            changepoint_prior_scale = trial.suggest_float('changepoint_prior_scale', 0.001, 0.5, log=True)
+            seasonality_prior_scale = trial.suggest_float('seasonality_prior_scale', 0.01, 10, log=True)
+            holidays_prior_scale = trial.suggest_float('holidays_prior_scale', 0.01, 10, log=True)
+            
+            # Обучение модели
+            model = Prophet(
+                holidays=self.holidays,
+                changepoint_prior_scale=changepoint_prior_scale,
+                seasonality_prior_scale=seasonality_prior_scale,
+                holidays_prior_scale=holidays_prior_scale,
+                yearly_seasonality=params.get('yearly_seasonality', True),
+                weekly_seasonality=params.get('weekly_seasonality', True),
+                daily_seasonality=params.get('daily_seasonality', False)
+            )
+            
+            model.fit(train_df)
+            
+            # Прогноз
+            future = model.make_future_dataframe(periods=len(test_df))
+            forecast = model.predict(future)
+            
+            # Выбираем только даты из тестовой выборки
+            test_forecast = forecast[forecast['ds'].isin(test_df['ds'])]
+            
+            # Объединяем с фактическими данными
+            merged = test_forecast.merge(test_df, on='ds')
+            
+            # Считаем MAPE
+            mape = mean_absolute_percentage_error(merged['y'], merged['yhat']) * 100
+            
+            return mape
+        
+        # Запускаем оптимизацию
+        study = optuna.create_study(direction='minimize')
+        try:
+            study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError, PicklingError) as e: # type: ignore # noqa
+            print(f"Parallel Optuna execution failed for Prophet: {e}. Falling back to n_jobs=1.")
+            study.optimize(objective, n_trials=n_trials, n_jobs=1)
+        
+        # Лучшие параметры
+        best_params = study.best_params
+        best_mape = study.best_value
+        
+        # Обновляем параметры
+        params.update(best_params)
+        
+        # Возвращаем лучшие параметры и метрику
+        return {'params': best_params, 'mape': best_mape}
+        
+    def auto_tune_xgboost(self, df_cafe, metric, params, n_trials=50):
+        """Автоматическая настройка гиперпараметров для XGBoost"""
+        # Подготовка признаков
+        df_features = df_cafe.copy()
+        df_features['day_of_week'] = df_features['Дата'].dt.dayofweek
+        df_features['month'] = df_features['Дата'].dt.month
+        df_features['day'] = df_features['Дата'].dt.day
+        df_features['is_weekend'] = df_features['day_of_week'].isin([5, 6]).astype(int)
+        
+        # Создаем лаговые признаки
+        for lag in [1, 7, 14, 30]:
+            df_features[f'lag_{lag}'] = df_features[metric].shift(lag)
+            
+        df_features = df_features.dropna()
+        
+        # Определяем признаки
+        features = ['day_of_week', 'month', 'day', 'is_weekend'] + [f'lag_{i}' for i in [1, 7, 14, 30]]
+        
+        # Доля обучающей выборки
+        train_split = params.get('train_split', 0.8)
+        train_size = int(len(df_features) * train_split)
+        
+        X = df_features[features]
+        y = df_features[metric]
+        X_train, y_train = X[:train_size], y[:train_size]
+        X_test, y_test = X[train_size:], y[train_size:]
+        
+        def objective(trial):
+            # Гиперпараметры для оптимизации
+            n_estimators = trial.suggest_int('n_estimators', 50, 500)
+            max_depth = trial.suggest_int('max_depth', 3, 10)
+            learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3, log=True)
+            subsample = trial.suggest_float('subsample', 0.6, 1.0)
+            colsample_bytree = trial.suggest_float('colsample_bytree', 0.6, 1.0)
+            
+            # Обучение модели
+            model = xgb.XGBRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                learning_rate=learning_rate,
+                subsample=subsample,
+                colsample_bytree=colsample_bytree,
+                random_state=42
+            )
+            
+            model.fit(X_train, y_train)
+            
+            # Прогноз и метрика
+            y_pred = model.predict(X_test)
+            mape = mean_absolute_percentage_error(y_test, y_pred) * 100
+            
+            return mape
+            
+        # Запускаем оптимизацию
+        study = optuna.create_study(direction='minimize')
+        try:
+            study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError, PicklingError) as e: # type: ignore # noqa
+            print(f"Parallel Optuna execution failed for XGBoost: {e}. Falling back to n_jobs=1.")
+            study.optimize(objective, n_trials=n_trials, n_jobs=1)
+        
+        # Лучшие параметры
+        best_params = study.best_params
+        best_mape = study.best_value
+        
+        # Обновляем параметры для модели
+        params.update({
+            'xgb_n_estimators': best_params['n_estimators'],
+            'xgb_max_depth': best_params['max_depth'],
+            'xgb_learning_rate': best_params['learning_rate'],
+            'xgb_subsample': best_params['subsample'],
+            'xgb_colsample_bytree': best_params['colsample_bytree']
+        })
+        
+        return {'params': best_params, 'mape': best_mape}
+        
+    def auto_tune_arima(self, df_cafe, metric, params, n_trials=30):
+        """Автоматическая настройка гиперпараметров для ARIMA"""
+        data = df_cafe.set_index('Дата')[metric]
+        
+        # Доля обучающей выборки
+        train_split = params.get('train_split', 0.8)
+        train_size = int(len(data) * train_split)
+        train_data = data[:train_size]
+        test_data = data[train_size:]
+        
+        def objective(trial):
+            # Гиперпараметры для оптимизации
+            p = trial.suggest_int('p', 0, 5)
+            d = trial.suggest_int('d', 0, 2)
+            q = trial.suggest_int('q', 0, 5)
+            
+            # Проверка на допустимость комбинации параметров
+            if p == 0 and d == 0 and q == 0:
+                return float('inf')
+                
+            try:
+                # Обучение модели
+                model = ARIMA(train_data, order=(p, d, q))
+                model_fit = model.fit()
+                
+                # Прогноз
+                forecast = model_fit.forecast(steps=len(test_data))
+                
+                # Метрика
+                mape = mean_absolute_percentage_error(test_data, forecast) * 100
+                return mape
+            except:
+                return float('inf')
+                
+        # Запускаем оптимизацию
+        study = optuna.create_study(direction='minimize')
+        try:
+            study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError, PicklingError) as e: # type: ignore # noqa
+            print(f"Parallel Optuna execution failed for ARIMA: {e}. Falling back to n_jobs=1.")
+            study.optimize(objective, n_trials=n_trials, n_jobs=1)
+        
+        # Лучшие параметры
+        best_params = study.best_params
+        best_mape = study.best_value
+        
+        # Обновляем параметры
+        params.update({
+            'arima_p': best_params['p'],
+            'arima_d': best_params['d'],
+            'arima_q': best_params['q']
+        })
+        
+        return {'params': best_params, 'mape': best_mape}
+        
+    def auto_tune_lstm(self, df_cafe, metric, params, n_trials=20):
+        """Автоматическая настройка гиперпараметров для LSTM"""
+        # Нормализация данных
+        scaler = StandardScaler()
+        data = df_cafe[metric].values.reshape(-1, 1)
+        scaled_data = scaler.fit_transform(data)
+        
+        # Параметры
+        lookback = params.get('lstm_lookback', 30)
+        
+        # Подготовка данных
+        X, y = self.prepare_time_series_data(df_cafe, metric, lookback)
+        X = X.reshape(X.shape[0], X.shape[1], 1)
+        
+        # Доля обучающей выборки
+        train_split = params.get('train_split', 0.8)
+        train_size = int(len(X) * train_split)
+        
+        X_train, y_train = torch.FloatTensor(X[:train_size]), torch.FloatTensor(y[:train_size])
+        X_test, y_test = torch.FloatTensor(X[train_size:]), torch.FloatTensor(y[train_size:])
+        
+        def objective(trial):
+            # Гиперпараметры для оптимизации
+            hidden_size = trial.suggest_int('hidden_size', 10, 100)
+            num_layers = trial.suggest_int('num_layers', 1, 3)
+            learning_rate = trial.suggest_float('learning_rate', 1e-4, 1e-2, log=True)
+            batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
+            
+            # Создание модели
+            model = LSTMModel(
+                input_size=1,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                output_size=1
+            )
+            
+            # Обучение
+            criterion = nn.MSELoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            
+            dataset = TensorDataset(X_train, y_train)
+            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            
+            # Уменьшаем количество эпох для оптимизации времени
+            epochs = 20
+            
+            for epoch in range(epochs):
+                for batch_X, batch_y in dataloader:
+                    optimizer.zero_grad()
+                    outputs = model(batch_X)
+                    loss = criterion(outputs.squeeze(), batch_y)
+                    loss.backward()
+                    optimizer.step()
+            
+            # Оценка на тестовых данных
+            model.eval()
+            with torch.no_grad():
+                y_pred = model(X_test).squeeze().numpy()
+                mape = mean_absolute_percentage_error(y_test.numpy(), y_pred) * 100
+                
+            return mape
+            
+        # Запускаем оптимизацию
+        study = optuna.create_study(direction='minimize')
+        try:
+            # Note: LSTM with PyTorch can be tricky with pickling for n_jobs > 1.
+            # If issues arise, this might need to be n_jobs=1 or use a different joblib backend.
+            study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError, PicklingError) as e: # type: ignore # noqa
+            print(f"Parallel Optuna execution failed for LSTM: {e}. Falling back to n_jobs=1.")
+            study.optimize(objective, n_trials=n_trials, n_jobs=1)
+        
+        # Лучшие параметры
+        best_params = study.best_params
+        best_mape = study.best_value
+        
+        # Обновляем параметры
+        params.update({
+            'lstm_hidden_size': best_params['hidden_size'],
+            'lstm_num_layers': best_params['num_layers'],
+            'lstm_learning_rate': best_params['learning_rate'],
+            'lstm_batch_size': best_params['batch_size']
+        })
+        
+        return {'params': best_params, 'mape': best_mape}
 
-    if unique_days >= 365:
-        return "mature"
-    elif unique_days >= 180:
-        return "established"
-    elif unique_days >= 90:
-        return "developing"
-    else:
-        return "new"
+    def remove_outliers(self, df_cafe, column, multiplier=1.5):
+        """Удаление выбросов"""
+        Q1 = df_cafe[column].quantile(0.25)
+        Q3 = df_cafe[column].quantile(0.75)
+        IQR = Q3 - Q1
 
+        lower_bound = Q1 - multiplier * IQR
+        upper_bound = Q3 + multiplier * IQR
 
-def auto_tune_prophet(self, df_cafe, metric, params, n_trials=50):
-    """Автоматическая настройка гиперпараметров для Prophet"""
-    # Готовим данные
-    df_model = df_cafe[['Дата', metric]].rename(columns={'Дата': 'ds', metric: 'y'})
+        return df_cafe[(df_cafe[column] >= lower_bound) & (df_cafe[column] <= upper_bound)]
 
-    # Доля обучающей выборки
-    train_split = params.get('train_split', 0.8)
-    train_size = int(len(df_model) * train_split)
-    train_df = df_model.iloc[:train_size]
-    test_df = df_model.iloc[train_size:]
+    def calculate_metrics(self, y_true, y_pred):
+        """Расчет метрик качества прогноза"""
+        # Удаляем NaN значения для корректного расчета
+        mask = ~np.isnan(y_true) & ~np.isnan(y_pred)
+        y_true = y_true[mask]
+        y_pred = y_pred[mask]
 
-    # Если тестовая выборка слишком маленькая, используем кросс-валидацию
-    if len(test_df) < 30:
-        test_df = df_model.iloc[-30:]
+        if len(y_true) == 0:
+            return {'MAPE': None, 'RMSE': None}
 
-    # Функция цели для оптимизации
-    def objective(trial):
-        # Гиперпараметры для оптимизации
-        changepoint_prior_scale = trial.suggest_float('changepoint_prior_scale', 0.001, 0.5, log=True)
-        seasonality_prior_scale = trial.suggest_float('seasonality_prior_scale', 0.01, 10, log=True)
-        holidays_prior_scale = trial.suggest_float('holidays_prior_scale', 0.01, 10, log=True)
+        mape = mean_absolute_percentage_error(y_true, y_pred) * 100
+        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
 
-        # Обучение модели
-        model = Prophet(
+        return {
+            'MAPE': round(mape, 2),
+            'RMSE': round(rmse, 2)
+        }
+
+    def prepare_time_series_data(self, df_cafe, column, lookback=30):
+        """Подготовка данных для моделей временных рядов"""
+        data = df_cafe[column].values
+        X, y = [], []
+
+        for i in range(lookback, len(data)):
+            X.append(data[i-lookback:i])
+            y.append(data[i])
+
+        return np.array(X), np.array(y)
+
+    def forecast_prophet(self, df_cafe, metric, params):
+        """Прогнозирование с помощью Prophet"""
+        df_model = df_cafe[['Дата', metric]].rename(columns={'Дата': 'ds', metric: 'y'})
+
+        m = Prophet(
             holidays=self.holidays,
-            changepoint_prior_scale=changepoint_prior_scale,
-            seasonality_prior_scale=seasonality_prior_scale,
-            holidays_prior_scale=holidays_prior_scale,
+            changepoint_prior_scale=params.get('changepoint_prior_scale', 0.05),
+            seasonality_prior_scale=params.get('seasonality_prior_scale', 10.0),
             yearly_seasonality=params.get('yearly_seasonality', True),
             weekly_seasonality=params.get('weekly_seasonality', True),
-            daily_seasonality=params.get('daily_seasonality', False)
+            daily_seasonality=params.get('daily_seasonality', False),
+            interval_width=params.get('confidence_interval', 0.95) # Updated
         )
 
-        model.fit(train_df)
+        m.fit(df_model)
+
+        future = m.make_future_dataframe(periods=params.get('forecast_horizon', 365))
+        forecast = m.predict(future)
+
+        return forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+
+    def forecast_arima(self, df_cafe, metric, params):
+        """Прогнозирование с помощью ARIMA"""
+        data = df_cafe.set_index('Дата')[metric]
+
+        # Параметры ARIMA (можно сделать настраиваемыми)
+        order = (params.get('arima_p', 2), params.get('arima_d', 1), params.get('arima_q', 2))
+
+        model = ARIMA(data, order=order)
+        model_fit = model.fit()
 
         # Прогноз
-        future = model.make_future_dataframe(periods=len(test_df))
-        forecast = model.predict(future)
+        forecast_steps = params.get('forecast_horizon', 365)
+        forecast = model_fit.forecast(steps=forecast_steps)
 
-        # Выбираем только даты из тестовой выборки
-        test_forecast = forecast[forecast['ds'].isin(test_df['ds'])]
+        # Создаем даты для прогноза
+        last_date = df_cafe['Дата'].max()
+        future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=forecast_steps)
 
-        # Объединяем с фактическими данными
-        merged = test_forecast.merge(test_df, on='ds')
+        # Создаем DataFrame с прогнозом
+        forecast_df = pd.DataFrame({
+            'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
+            'yhat': pd.concat([pd.Series(data.values), forecast])
+        })
 
-        # Считаем MAPE
-        mape = mean_absolute_percentage_error(merged['y'], merged['yhat']) * 100
+        # Добавляем доверительные интервалы
+        confidence_interval = params.get('confidence_interval', 0.95)
+        alpha = 1 - confidence_interval
+        
+        # Получаем прогнозные значения и стандартные ошибки
+        forecast_results = model_fit.get_forecast(steps=forecast_steps)
+        forecast_values = forecast_results.predicted_mean
+        conf_int = forecast_results.conf_int(alpha=alpha) # ARIMA uses alpha
 
-        return mape
+        # Создаем DataFrame с прогнозом
+        forecast_df = pd.DataFrame({
+            'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
+            'yhat': pd.concat([pd.Series(data.values), forecast_values])
+        })
+        
+        # Добавляем границы доверительного интервала
+        # Убедимся, что существующие данные не получают интервалы, если они не были рассчитаны
+        yhat_lower = pd.Series([np.nan] * len(df_cafe))
+        yhat_upper = pd.Series([np.nan] * len(df_cafe))
+        
+        yhat_lower = pd.concat([yhat_lower, conf_int.iloc[:, 0]]).reset_index(drop=True)
+        yhat_upper = pd.concat([yhat_upper, conf_int.iloc[:, 1]]).reset_index(drop=True)
 
-    # Запускаем оптимизацию
-    study = optuna.create_study(direction='minimize')
-    try:
-        study.optimize(objective, n_trials=n_trials, n_jobs=-1)
-    except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError,
-            PicklingError) as e:  # type: ignore # noqa
-        print(f"Parallel Optuna execution failed for Prophet: {e}. Falling back to n_jobs=1.")
-        study.optimize(objective, n_trials=n_trials, n_jobs=1)
-
-    # Лучшие параметры
-    best_params = study.best_params
-    best_mape = study.best_value
-
-    # Обновляем параметры
-    params.update(best_params)
-
-    # Возвращаем лучшие параметры и метрику
-    return {'params': best_params, 'mape': best_mape}
+        forecast_df['yhat_lower'] = yhat_lower
+        forecast_df['yhat_upper'] = yhat_upper
+        
+        # Заполняем NaN в yhat для исторических данных оригинальными значениями
+        forecast_df['yhat'] = forecast_df['yhat'].fillna(pd.Series(data.values, index=df_cafe.index[:len(data)]))
 
 
-def auto_tune_xgboost(self, df_cafe, metric, params, n_trials=50):
-    """Автоматическая настройка гиперпараметров для XGBoost"""
-    # Подготовка признаков
-    df_features = df_cafe.copy()
-    df_features['day_of_week'] = df_features['Дата'].dt.dayofweek
-    df_features['month'] = df_features['Дата'].dt.month
-    df_features['day'] = df_features['Дата'].dt.day
-    df_features['is_weekend'] = df_features['day_of_week'].isin([5, 6]).astype(int)
+        return forecast_df
 
-    # Создаем лаговые признаки
-    for lag in [1, 7, 14, 30]:
-        df_features[f'lag_{lag}'] = df_features[metric].shift(lag)
+    def forecast_xgboost(self, df_cafe, metric, params):
+        """Прогнозирование с помощью XGBoost"""
+        # Подготовка признаков
+        df_features = df_cafe.copy()
+        df_features['day_of_week'] = df_features['Дата'].dt.dayofweek
+        df_features['month'] = df_features['Дата'].dt.month
+        df_features['day'] = df_features['Дата'].dt.day
+        df_features['is_weekend'] = df_features['day_of_week'].isin([5, 6]).astype(int)
 
-    df_features = df_features.dropna()
+        # Создаем лаговые признаки
+        for lag in [1, 7, 14, 30]:
+            df_features[f'lag_{lag}'] = df_features[metric].shift(lag)
 
-    # Определяем признаки
-    features = ['day_of_week', 'month', 'day', 'is_weekend'] + [f'lag_{i}' for i in [1, 7, 14, 30]]
+        df_features = df_features.dropna()
 
-    # Доля обучающей выборки
-    train_split = params.get('train_split', 0.8)
-    train_size = int(len(df_features) * train_split)
+        # Разделение на обучающую и тестовую выборки
+        train_size = int(len(df_features) * params.get('train_split', 0.8))
+        train = df_features[:train_size]
 
-    X = df_features[features]
-    y = df_features[metric]
-    X_train, y_train = X[:train_size], y[:train_size]
-    X_test, y_test = X[train_size:], y[train_size:]
+        features = ['day_of_week', 'month', 'day', 'is_weekend'] + [f'lag_{i}' for i in [1, 7, 14, 30]]
 
-    def objective(trial):
-        # Гиперпараметры для оптимизации
-        n_estimators = trial.suggest_int('n_estimators', 50, 500)
-        max_depth = trial.suggest_int('max_depth', 3, 10)
-        learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3, log=True)
-        subsample = trial.suggest_float('subsample', 0.6, 1.0)
-        colsample_bytree = trial.suggest_float('colsample_bytree', 0.6, 1.0)
+        X_train = train[features]
+        y_train = train[metric]
 
         # Обучение модели
         model = xgb.XGBRegressor(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            subsample=subsample,
-            colsample_bytree=colsample_bytree,
+            n_estimators=params.get('xgb_n_estimators', 100),
+            max_depth=params.get('xgb_max_depth', 5),
+            learning_rate=params.get('xgb_learning_rate', 0.1),
             random_state=42
         )
 
         model.fit(X_train, y_train)
 
-        # Прогноз и метрика
-        y_pred = model.predict(X_test)
-        mape = mean_absolute_percentage_error(y_test, y_pred) * 100
+        # Прогнозирование
+        last_date = df_cafe['Дата'].max()
+        forecast_dates = pd.date_range(start=last_date + timedelta(days=1),
+                                     periods=params.get('forecast_horizon', 365))
 
-        return mape
+        # Создаем будущие признаки
+        future_df = pd.DataFrame({'Дата': forecast_dates})
+        future_df['day_of_week'] = future_df['Дата'].dt.dayofweek
+        future_df['month'] = future_df['Дата'].dt.month
+        future_df['day'] = future_df['Дата'].dt.day
+        future_df['is_weekend'] = future_df['day_of_week'].isin([5, 6]).astype(int)
 
-    # Запускаем оптимизацию
-    study = optuna.create_study(direction='minimize')
-    try:
-        study.optimize(objective, n_trials=n_trials, n_jobs=-1)
-    except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError,
-            PicklingError) as e:  # type: ignore # noqa
-        print(f"Parallel Optuna execution failed for XGBoost: {e}. Falling back to n_jobs=1.")
-        study.optimize(objective, n_trials=n_trials, n_jobs=1)
+        # Для прогноза используем последние известные значения для лагов
+        last_values = df_features[metric].tail(30).values
+        predictions = []
 
-    # Лучшие параметры
-    best_params = study.best_params
-    best_mape = study.best_value
+        for i in range(len(future_df)):
+            # Создаем лаговые признаки из последних предсказаний
+            lags = {}
+            for lag in [1, 7, 14, 30]:
+                if i >= lag:
+                    lags[f'lag_{lag}'] = predictions[i-lag]
+                else:
+                    if len(last_values) >= lag - i:
+                        lags[f'lag_{lag}'] = last_values[-(lag-i)]
+                    else:
+                        lags[f'lag_{lag}'] = np.mean(last_values)
 
-    # Обновляем параметры для модели
-    params.update({
-        'xgb_n_estimators': best_params['n_estimators'],
-        'xgb_max_depth': best_params['max_depth'],
-        'xgb_learning_rate': best_params['learning_rate'],
-        'xgb_subsample': best_params['subsample'],
-        'xgb_colsample_bytree': best_params['colsample_bytree']
-    })
+            X_pred = pd.DataFrame([{
+                **future_df.iloc[i][features[:4]].to_dict(),
+                **lags
+            }])
 
-    return {'params': best_params, 'mape': best_mape}
+            pred = model.predict(X_pred)[0]
+            predictions.append(pred)
 
+        # Объединяем исторические и прогнозные данные
+        forecast_df = pd.DataFrame({
+            'ds': pd.concat([df_cafe['Дата'], future_df['Дата']]),
+            'yhat': pd.concat([df_cafe[metric], pd.Series(predictions)])
+        })
 
-def auto_tune_arima(self, df_cafe, metric, params, n_trials=30):
-    """Автоматическая настройка гиперпараметров для ARIMA"""
-    data = df_cafe.set_index('Дата')[metric]
+        # Добавляем доверительные интервалы
+        std_error = np.std(y_train - model.predict(X_train)) # Оценка стандартной ошибки на обучающей выборке
+        confidence_interval = params.get('confidence_interval', 0.95)
+        z_score = norm.ppf((1 + confidence_interval) / 2)
 
-    # Доля обучающей выборки
-    train_split = params.get('train_split', 0.8)
-    train_size = int(len(data) * train_split)
-    train_data = data[:train_size]
-    test_data = data[train_size:]
-
-    def objective(trial):
-        # Гиперпараметры для оптимизации
-        p = trial.suggest_int('p', 0, 5)
-        d = trial.suggest_int('d', 0, 2)
-        q = trial.suggest_int('q', 0, 5)
-
-        # Проверка на допустимость комбинации параметров
-        if p == 0 and d == 0 and q == 0:
-            return float('inf')
-
-        try:
-            # Обучение модели
-            model = ARIMA(train_data, order=(p, d, q))
-            model_fit = model.fit()
-
-            # Прогноз
-            forecast = model_fit.forecast(steps=len(test_data))
-
-            # Метрика
-            mape = mean_absolute_percentage_error(test_data, forecast) * 100
-            return mape
-        except:
-            return float('inf')
-
-    # Запускаем оптимизацию
-    study = optuna.create_study(direction='minimize')
-    try:
-        study.optimize(objective, n_trials=n_trials, n_jobs=-1)
-    except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError,
-            PicklingError) as e:  # type: ignore # noqa
-        print(f"Parallel Optuna execution failed for ARIMA: {e}. Falling back to n_jobs=1.")
-        study.optimize(objective, n_trials=n_trials, n_jobs=1)
-
-    # Лучшие параметры
-    best_params = study.best_params
-    best_mape = study.best_value
-
-    # Обновляем параметры
-    params.update({
-        'arima_p': best_params['p'],
-        'arima_d': best_params['d'],
-        'arima_q': best_params['q']
-    })
-
-    return {'params': best_params, 'mape': best_mape}
+        forecast_df['yhat_lower'] = forecast_df['yhat'] - z_score * std_error
+        forecast_df['yhat_upper'] = forecast_df['yhat'] + z_score * std_error
+        
+        # Для исторических данных yhat_lower и yhat_upper могут быть NaN или равны yhat
+        historical_len = len(df_cafe[metric])
+        forecast_df.loc[:historical_len-1, 'yhat_lower'] = forecast_df.loc[:historical_len-1, 'yhat']
+        forecast_df.loc[:historical_len-1, 'yhat_upper'] = forecast_df.loc[:historical_len-1, 'yhat']
 
 
-def auto_tune_lstm(self, df_cafe, metric, params, n_trials=20):
-    """Автоматическая настройка гиперпараметров для LSTM"""
-    # Нормализация данных
-    scaler = StandardScaler()
-    data = df_cafe[metric].values.reshape(-1, 1)
-    scaled_data = scaler.fit_transform(data)
+        return forecast_df
 
-    # Параметры
-    lookback = params.get('lstm_lookback', 30)
+    def forecast_lstm(self, df_cafe, metric, params):
+        """Прогнозирование с помощью LSTM"""
+        # Нормализация данных
+        scaler = StandardScaler()
+        data = df_cafe[metric].values.reshape(-1, 1)
+        scaled_data = scaler.fit_transform(data)
 
-    # Подготовка данных
-    X, y = self.prepare_time_series_data(df_cafe, metric, lookback)
-    X = X.reshape(X.shape[0], X.shape[1], 1)
+        # Параметры
+        lookback = params.get('lstm_lookback', 30)
+        train_size = int(len(scaled_data) * params.get('train_split', 0.8))
 
-    # Доля обучающей выборки
-    train_split = params.get('train_split', 0.8)
-    train_size = int(len(X) * train_split)
+        # Подготовка данных
+        X, y = self.prepare_time_series_data(df_cafe, metric, lookback)
+        X = X.reshape(X.shape[0], X.shape[1], 1)
 
-    X_train, y_train = torch.FloatTensor(X[:train_size]), torch.FloatTensor(y[:train_size])
-    X_test, y_test = torch.FloatTensor(X[train_size:]), torch.FloatTensor(y[train_size:])
-
-    def objective(trial):
-        # Гиперпараметры для оптимизации
-        hidden_size = trial.suggest_int('hidden_size', 10, 100)
-        num_layers = trial.suggest_int('num_layers', 1, 3)
-        learning_rate = trial.suggest_float('learning_rate', 1e-4, 1e-2, log=True)
-        batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
+        # Разделение на обучающую и тестовую выборки
+        X_train = torch.FloatTensor(X[:train_size])
+        y_train = torch.FloatTensor(y[:train_size])
 
         # Создание модели
         model = LSTMModel(
             input_size=1,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
+            hidden_size=params.get('lstm_hidden_size', 50),
+            num_layers=params.get('lstm_num_layers', 2),
             output_size=1
         )
 
         # Обучение
         criterion = nn.MSELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(model.parameters(), lr=params.get('lstm_learning_rate', 0.001))
 
         dataset = TensorDataset(X_train, y_train)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-        # Уменьшаем количество эпох для оптимизации времени
-        epochs = 20
-
+        epochs = params.get('lstm_epochs', 50)
         for epoch in range(epochs):
             for batch_X, batch_y in dataloader:
                 optimizer.zero_grad()
@@ -415,632 +690,307 @@ def auto_tune_lstm(self, df_cafe, metric, params, n_trials=20):
                 loss.backward()
                 optimizer.step()
 
-        # Оценка на тестовых данных
+        # Прогнозирование
         model.eval()
         with torch.no_grad():
-            y_pred = model(X_test).squeeze().numpy()
-            mape = mean_absolute_percentage_error(y_test.numpy(), y_pred) * 100
-
-        return mape
-
-    # Запускаем оптимизацию
-    study = optuna.create_study(direction='minimize')
-    try:
-        # Note: LSTM with PyTorch can be tricky with pickling for n_jobs > 1.
-        # If issues arise, this might need to be n_jobs=1 or use a different joblib backend.
-        study.optimize(objective, n_trials=n_trials, n_jobs=-1)
-    except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError,
-            PicklingError) as e:  # type: ignore # noqa
-        print(f"Parallel Optuna execution failed for LSTM: {e}. Falling back to n_jobs=1.")
-        study.optimize(objective, n_trials=n_trials, n_jobs=1)
-
-    # Лучшие параметры
-    best_params = study.best_params
-    best_mape = study.best_value
-
-    # Обновляем параметры
-    params.update({
-        'lstm_hidden_size': best_params['hidden_size'],
-        'lstm_num_layers': best_params['num_layers'],
-        'lstm_learning_rate': best_params['learning_rate'],
-        'lstm_batch_size': best_params['batch_size']
-    })
-
-    return {'params': best_params, 'mape': best_mape}
-
-
-def remove_outliers(self, df_cafe, column, multiplier=1.5):
-    """Удаление выбросов"""
-    Q1 = df_cafe[column].quantile(0.25)
-    Q3 = df_cafe[column].quantile(0.75)
-    IQR = Q3 - Q1
-
-    lower_bound = Q1 - multiplier * IQR
-    upper_bound = Q3 + multiplier * IQR
-
-    return df_cafe[(df_cafe[column] >= lower_bound) & (df_cafe[column] <= upper_bound)]
-
-
-def calculate_metrics(self, y_true, y_pred):
-    """Расчет метрик качества прогноза"""
-    # Удаляем NaN значения для корректного расчета
-    mask = ~np.isnan(y_true) & ~np.isnan(y_pred)
-    y_true = y_true[mask]
-    y_pred = y_pred[mask]
-
-    if len(y_true) == 0:
-        return {'MAPE': None, 'RMSE': None}
-
-    # Избегаем деления на ноль в MAPE
-    non_zero_mask = y_true != 0
-    if non_zero_mask.sum() == 0:
-        mape = None
-    else:
-        mape = mean_absolute_percentage_error(y_true[non_zero_mask], y_pred[non_zero_mask]) * 100
-
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-
-    return {
-        'MAPE': round(mape, 2) if mape is not None else None,
-        'RMSE': round(rmse, 2)
-    }
-
-
-def prepare_time_series_data(self, df_cafe, column, lookback=30):
-    """Подготовка данных для моделей временных рядов"""
-    data = df_cafe[column].values
-    X, y = [], []
-
-    for i in range(lookback, len(data)):
-        X.append(data[i - lookback:i])
-        y.append(data[i])
-
-    return np.array(X), np.array(y)
-
-
-def forecast_prophet(self, df_cafe, metric, params):
-    """Прогнозирование с помощью Prophet"""
-    df_model = df_cafe[['Дата', metric]].rename(columns={'Дата': 'ds', metric: 'y'})
-
-    m = Prophet(
-        holidays=self.holidays,
-        changepoint_prior_scale=params.get('changepoint_prior_scale', 0.05),
-        seasonality_prior_scale=params.get('seasonality_prior_scale', 10.0),
-        yearly_seasonality=params.get('yearly_seasonality', True),
-        weekly_seasonality=params.get('weekly_seasonality', True),
-        daily_seasonality=params.get('daily_seasonality', False),
-        interval_width=params.get('confidence_interval', 0.95)  # Updated
-    )
-
-    m.fit(df_model)
-
-    future = m.make_future_dataframe(periods=params.get('forecast_horizon', 365))
-    forecast = m.predict(future)
-
-    return forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
-
-
-def forecast_arima(self, df_cafe, metric, params):
-    """Прогнозирование с помощью ARIMA"""
-    data = df_cafe.set_index('Дата')[metric]
-
-    # Параметры ARIMA (можно сделать настраиваемыми)
-    order = (params.get('arima_p', 2), params.get('arima_d', 1), params.get('arima_q', 2))
-
-    model = ARIMA(data, order=order)
-    model_fit = model.fit()
-
-    # Прогноз
-    forecast_steps = params.get('forecast_horizon', 365)
-    forecast = model_fit.forecast(steps=forecast_steps)
-
-    # Создаем даты для прогноза
-    last_date = df_cafe['Дата'].max()
-    future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=forecast_steps)
-
-    # Создаем DataFrame с прогнозом
-    forecast_df = pd.DataFrame({
-        'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
-        'yhat': pd.concat([pd.Series(data.values), forecast])
-    })
-
-    # Добавляем доверительные интервалы
-    confidence_interval = params.get('confidence_interval', 0.95)
-    alpha = 1 - confidence_interval
-
-    # Получаем прогнозные значения и стандартные ошибки
-    forecast_results = model_fit.get_forecast(steps=forecast_steps)
-    forecast_values = forecast_results.predicted_mean
-    conf_int = forecast_results.conf_int(alpha=alpha)  # ARIMA uses alpha
-
-    # Создаем DataFrame с прогнозом
-    forecast_df = pd.DataFrame({
-        'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
-        'yhat': pd.concat([pd.Series(data.values), forecast_values])
-    })
-
-    # Добавляем границы доверительного интервала
-    # Убедимся, что существующие данные не получают интервалы, если они не были рассчитаны
-    yhat_lower = pd.Series([np.nan] * len(df_cafe))
-    yhat_upper = pd.Series([np.nan] * len(df_cafe))
-
-    yhat_lower = pd.concat([yhat_lower, conf_int.iloc[:, 0]]).reset_index(drop=True)
-    yhat_upper = pd.concat([yhat_upper, conf_int.iloc[:, 1]]).reset_index(drop=True)
-
-    forecast_df['yhat_lower'] = yhat_lower
-    forecast_df['yhat_upper'] = yhat_upper
-
-    # Заполняем NaN в yhat для исторических данных оригинальными значениями
-    forecast_df['yhat'] = forecast_df['yhat'].fillna(pd.Series(data.values, index=df_cafe.index[:len(data)]))
-
-    return forecast_df
-
-
-def forecast_xgboost(self, df_cafe, metric, params):
-    """Прогнозирование с помощью XGBoost"""
-    # Подготовка признаков
-    df_features = df_cafe.copy()
-    df_features['day_of_week'] = df_features['Дата'].dt.dayofweek
-    df_features['month'] = df_features['Дата'].dt.month
-    df_features['day'] = df_features['Дата'].dt.day
-    df_features['is_weekend'] = df_features['day_of_week'].isin([5, 6]).astype(int)
-
-    # Создаем лаговые признаки
-    for lag in [1, 7, 14, 30]:
-        df_features[f'lag_{lag}'] = df_features[metric].shift(lag)
-
-    df_features = df_features.dropna()
-
-    # Разделение на обучающую и тестовую выборки
-    train_size = int(len(df_features) * params.get('train_split', 0.8))
-    train = df_features[:train_size]
-
-    features = ['day_of_week', 'month', 'day', 'is_weekend'] + [f'lag_{i}' for i in [1, 7, 14, 30]]
-
-    X_train = train[features]
-    y_train = train[metric]
-
-    # Обучение модели
-    model = xgb.XGBRegressor(
-        n_estimators=params.get('xgb_n_estimators', 100),
-        max_depth=params.get('xgb_max_depth', 5),
-        learning_rate=params.get('xgb_learning_rate', 0.1),
-        random_state=42
-    )
-
-    model.fit(X_train, y_train)
-
-    # Прогнозирование
-    last_date = df_cafe['Дата'].max()
-    forecast_dates = pd.date_range(start=last_date + timedelta(days=1),
-                                   periods=params.get('forecast_horizon', 365))
-
-    # Создаем будущие признаки
-    future_df = pd.DataFrame({'Дата': forecast_dates})
-    future_df['day_of_week'] = future_df['Дата'].dt.dayofweek
-    future_df['month'] = future_df['Дата'].dt.month
-    future_df['day'] = future_df['Дата'].dt.day
-    future_df['is_weekend'] = future_df['day_of_week'].isin([5, 6]).astype(int)
-
-    # Для прогноза используем последние известные значения для лагов
-    last_values = df_features[metric].tail(30).values
-    predictions = []
-
-    for i in range(len(future_df)):
-        # Создаем лаговые признаки из последних предсказаний
-        lags = {}
-        for lag in [1, 7, 14, 30]:
-            if i >= lag:
-                lags[f'lag_{lag}'] = predictions[i - lag]
-            else:
-                if len(last_values) >= lag - i:
-                    lags[f'lag_{lag}'] = last_values[-(lag - i)]
-                else:
-                    lags[f'lag_{lag}'] = np.mean(last_values)
-
-        X_pred = pd.DataFrame([{
-            **future_df.iloc[i][features[:4]].to_dict(),
-            **lags
-        }])
-
-        pred = model.predict(X_pred)[0]
-        predictions.append(pred)
-
-    # Объединяем исторические и прогнозные данные
-    forecast_df = pd.DataFrame({
-        'ds': pd.concat([df_cafe['Дата'], future_df['Дата']]),
-        'yhat': pd.concat([df_cafe[metric], pd.Series(predictions)])
-    })
-
-    # Добавляем доверительные интервалы
-    std_error = np.std(y_train - model.predict(X_train))  # Оценка стандартной ошибки на обучающей выборке
-    confidence_interval = params.get('confidence_interval', 0.95)
-    z_score = norm.ppf((1 + confidence_interval) / 2)
-
-    forecast_df['yhat_lower'] = forecast_df['yhat'] - z_score * std_error
-    forecast_df['yhat_upper'] = forecast_df['yhat'] + z_score * std_error
-
-    # Для исторических данных yhat_lower и yhat_upper могут быть NaN или равны yhat
-    historical_len = len(df_cafe[metric])
-    forecast_df.loc[:historical_len - 1, 'yhat_lower'] = forecast_df.loc[:historical_len - 1, 'yhat']
-    forecast_df.loc[:historical_len - 1, 'yhat_upper'] = forecast_df.loc[:historical_len - 1, 'yhat']
-
-    return forecast_df
-
-
-def forecast_lstm(self, df_cafe, metric, params):
-    """Прогнозирование с помощью LSTM"""
-    # Нормализация данных
-    scaler = StandardScaler()
-    data = df_cafe[metric].values.reshape(-1, 1)
-    scaled_data = scaler.fit_transform(data)
-
-    # Параметры
-    lookback = params.get('lstm_lookback', 30)
-    train_size = int(len(scaled_data) * params.get('train_split', 0.8))
-
-    # Подготовка данных
-    X, y = self.prepare_time_series_data(df_cafe, metric, lookback)
-    X = X.reshape(X.shape[0], X.shape[1], 1)
-
-    # Разделение на обучающую и тестовую выборки
-    X_train = torch.FloatTensor(X[:train_size])
-    y_train = torch.FloatTensor(y[:train_size])
-
-    # Создание модели
-    model = LSTMModel(
-        input_size=1,
-        hidden_size=params.get('lstm_hidden_size', 50),
-        num_layers=params.get('lstm_num_layers', 2),
-        output_size=1
-    )
-
-    # Обучение
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=params.get('lstm_learning_rate', 0.001))
-
-    dataset = TensorDataset(X_train, y_train)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-    epochs = params.get('lstm_epochs', 50)
-    for epoch in range(epochs):
-        for batch_X, batch_y in dataloader:
-            optimizer.zero_grad()
-            outputs = model(batch_X)
-            loss = criterion(outputs.squeeze(), batch_y)
-            loss.backward()
-            optimizer.step()
-
-    # Прогнозирование
-    model.eval()
-    with torch.no_grad():
-        # Прогноз на будущее
-        last_sequence = torch.FloatTensor(scaled_data[-lookback:].reshape(1, lookback, 1))
-        predictions = []
-
-        for _ in range(params.get('forecast_horizon', 365)):
-            pred = model(last_sequence)
-            predictions.append(pred.item())
-
-            # Обновляем последовательность
-            new_sequence = torch.cat([last_sequence[:, 1:, :], pred.reshape(1, 1, 1)], dim=1)
-            last_sequence = new_sequence
-
-    # Денормализация
-    predictions = scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).flatten()
-
-    # Создаем DataFrame с результатами
-    last_date = df_cafe['Дата'].max()
-    future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=len(predictions))
-
-    forecast_df = pd.DataFrame({
-        'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
-        'yhat': pd.concat([df_cafe[metric], pd.Series(predictions)])
-    })
-
-    # Добавляем доверительные интервалы
-    # Для LSTM оценка std_error может быть сложной.
-    # Используем стандартное отклонение остатков на обучающих данных, если возможно,
-    # или более простой эвристический подход.
-    # Здесь используется std обучающих данных y_train, что является грубой оценкой.
-    # Более точный подход потребовал бы оценки неопределенности модели (например, через dropout MC).
-
-    # Расчет остатков на обучающей выборке
-    model.eval()
-    with torch.no_grad():
-        train_predictions = model(X_train).squeeze().numpy()
-    residuals = y_train.numpy() - train_predictions
-    std_error_train = np.std(residuals)  # Используем std остатков на трейне
-
-    confidence_interval = params.get('confidence_interval', 0.95)
-    z_score = norm.ppf((1 + confidence_interval) / 2)
-
-    # Применяем интервалы только к прогнозной части
-    forecast_len = len(predictions)
-    hist_len = len(forecast_df) - forecast_len
-
-    forecast_df['yhat_lower'] = forecast_df['yhat']  # по умолчанию
-    forecast_df['yhat_upper'] = forecast_df['yhat']  # по умолчанию
-
-    forecast_df.iloc[hist_len:, forecast_df.columns.get_loc('yhat_lower')] = forecast_df.iloc[hist_len:][
-                                                                                 'yhat'] - z_score * std_error_train
-    forecast_df.iloc[hist_len:, forecast_df.columns.get_loc('yhat_upper')] = forecast_df.iloc[hist_len:][
-                                                                                 'yhat'] + z_score * std_error_train
-
-    return forecast_df
-
-
-def forecast_cafe(self, cafe, params):
-    """Прогнозирование для одного кафе"""
-    try:
-        # Фильтрация данных
-        df_cafe = self.df[self.df['Кафе'] == cafe].copy()
-        df_cafe = df_cafe.groupby('Дата').agg({
-            'Тр': 'sum',
-            'Чек': 'mean',
-            'Выручка': 'sum'
-        }).reset_index()
-
-        # Удаление выбросов если включено
-        if params.get('remove_outliers', True):
-            multiplier = params.get('outlier_multiplier', 1.5)
-            df_cafe = self.remove_outliers(df_cafe, 'Тр', multiplier)
-            df_cafe = self.remove_outliers(df_cafe, 'Чек', multiplier)
-
-        # Заполнение пропусков
-        df_cafe = df_cafe.set_index('Дата').asfreq('D').reset_index()
-        df_cafe['Тр'] = df_cafe['Тр'].fillna(df_cafe['Тр'].mean())
-        df_cafe['Чек'] = df_cafe['Чек'].fillna(df_cafe['Чек'].mean())
-        df_cafe['Выручка'] = df_cafe['Тр'] * df_cafe['Чек']
-
-        # Выбор модели для прогнозирования
-        model_type = params.get('model_type', 'prophet')
-
-        # Автоматическая настройка гиперпараметров, если включена
-        if params.get('auto_tune', False):
-            # Словарь функций автонастройки для разных моделей
-            auto_tune_functions = {
-                'prophet': self.auto_tune_prophet,
-                'arima': self.auto_tune_arima,
-                'xgboost': self.auto_tune_xgboost,
-                'lstm': self.auto_tune_lstm
-            }
-
-            # Выбираем нужную функцию автонастройки
-            auto_tune_func = auto_tune_functions.get(model_type)
-
-            if auto_tune_func:
-                # Число попыток оптимизации зависит от размера данных
-                n_trials = 20 if len(df_cafe) < 365 else 50
-
-                # Обновляем параметры в progress_queue, если есть функция обратного вызова
-                progress_message = f"Автонастройка параметров для {cafe}, модель {model_type}..."
-                progress_queue.put({
-                    'message': progress_message,
-                    'status': 'auto_tuning'
-                })
-
-                # Запускаем автонастройку для трафика
-                traffic_tuning = auto_tune_func(df_cafe, 'Тр', params.copy(), n_trials)
-
-                # Обновляем сообщение о прогрессе
-                progress_message = f"Лучшая MAPE для трафика: {traffic_tuning['mape']:.2f}%"
-                progress_queue.put({
-                    'message': progress_message,
-                    'status': 'auto_tuning'
-                })
-
-                # Запускаем автонастройку для среднего чека
-                check_tuning = auto_tune_func(df_cafe, 'Чек', params.copy(), n_trials)
-
-                # Обновляем сообщение о прогрессе
-                progress_message = f"Лучшая MAPE для среднего чека: {check_tuning['mape']:.2f}%"
-                progress_queue.put({
-                    'message': progress_message,
-                    'status': 'auto_tuning'
-                })
-
-                # Объединяем лучшие параметры из обеих автонастроек
-                # В случае конфликта приоритет отдаем параметрам с лучшей метрикой
-                if traffic_tuning['mape'] < check_tuning['mape']:
-                    params.update(traffic_tuning['params'])
-                else:
-                    params.update(check_tuning['params'])
-
-                # Сохраняем лучшие метрики
-                if 'auto_tune_metrics' not in metrics_cache:
-                    metrics_cache['auto_tune_metrics'] = {}
-
-                metrics_cache['auto_tune_metrics'][cafe] = {
-                    'traffic_mape': traffic_tuning['mape'],
-                    'check_mape': check_tuning['mape'],
-                    'params': params
-                }
-
-        # Словарь с функциями прогнозирования
-        forecast_functions = {
-            'prophet': self.forecast_prophet,
-            'arima': self.forecast_arima,
-            'xgboost': self.forecast_xgboost,
-            'lstm': self.forecast_lstm
-        }
-
-        forecast_func = forecast_functions.get(model_type, self.forecast_prophet)
-
-        # Прогнозирование трафика
-        forecast_traffic = forecast_func(df_cafe, 'Тр', params)
-
-        # Прогнозирование среднего чека
-        forecast_check = forecast_func(df_cafe, 'Чек', params)
-
-        # Объединение результатов
-        result = pd.DataFrame({
-            'ds': forecast_traffic['ds'],
-            'traffic_forecast': forecast_traffic['yhat'],
-            'traffic_lower': forecast_traffic['yhat_lower'],
-            'traffic_upper': forecast_traffic['yhat_upper'],
-            'check_forecast': forecast_check['yhat'],
-            'check_lower': forecast_check['yhat_lower'],
-            'check_upper': forecast_check['yhat_upper']
+            # Прогноз на будущее
+            last_sequence = torch.FloatTensor(scaled_data[-lookback:].reshape(1, lookback, 1))
+            predictions = []
+
+            for _ in range(params.get('forecast_horizon', 365)):
+                pred = model(last_sequence)
+                predictions.append(pred.item())
+
+                # Обновляем последовательность
+                new_sequence = torch.cat([last_sequence[:, 1:, :], pred.reshape(1, 1, 1)], dim=1)
+                last_sequence = new_sequence
+
+        # Денормализация
+        predictions = scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).flatten()
+
+        # Создаем DataFrame с результатами
+        last_date = df_cafe['Дата'].max()
+        future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=len(predictions))
+
+        forecast_df = pd.DataFrame({
+            'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
+            'yhat': pd.concat([df_cafe[metric], pd.Series(predictions)])
         })
 
-        # Расчет прогноза выручки
-        result['revenue_forecast'] = result['traffic_forecast'] * result['check_forecast']
-        result['revenue_lower'] = result['traffic_lower'] * result['check_lower']
-        result['revenue_upper'] = result['traffic_upper'] * result['check_upper']
+        # Добавляем доверительные интервалы
+        # Для LSTM оценка std_error может быть сложной.
+        # Используем стандартное отклонение остатков на обучающих данных, если возможно,
+        # или более простой эвристический подход.
+        # Здесь используется std обучающих данных y_train, что является грубой оценкой.
+        # Более точный подход потребовал бы оценки неопределенности модели (например, через dropout MC).
+        
+        # Расчет остатков на обучающей выборке
+        model.eval()
+        with torch.no_grad():
+            train_predictions = model(X_train).squeeze().numpy()
+        residuals = y_train.numpy() - train_predictions
+        std_error_train = np.std(residuals) # Используем std остатков на трейне
 
-        # Добавление фактических данных
-        result = result.merge(
-            df_cafe[['Дата', 'Тр', 'Чек', 'Выручка']].rename(columns={
-                'Дата': 'ds',
-                'Тр': 'traffic_fact',
-                'Чек': 'check_fact',
-                'Выручка': 'revenue_fact'
-            }),
-            on='ds',
-            how='left'
-        )
+        confidence_interval = params.get('confidence_interval', 0.95)
+        z_score = norm.ppf((1 + confidence_interval) / 2)
 
-        result['cafe'] = cafe
+        # Применяем интервалы только к прогнозной части
+        forecast_len = len(predictions)
+        hist_len = len(forecast_df) - forecast_len
+        
+        forecast_df['yhat_lower'] = forecast_df['yhat'] # по умолчанию
+        forecast_df['yhat_upper'] = forecast_df['yhat'] # по умолчанию
 
-        # Применение корректировок
-        if 'adjustments' in params and params['adjustments']:
-            adjusted_rows_mask = pd.Series(False, index=result.index)  # Keep track of adjusted rows
+        forecast_df.iloc[hist_len:, forecast_df.columns.get_loc('yhat_lower')] = forecast_df.iloc[hist_len:]['yhat'] - z_score * std_error_train
+        forecast_df.iloc[hist_len:, forecast_df.columns.get_loc('yhat_upper')] = forecast_df.iloc[hist_len:]['yhat'] + z_score * std_error_train
 
-            for adj in params['adjustments']:
-                if adj['cafe'] == cafe or adj['cafe'] == 'ALL':
-                    date_from = pd.to_datetime(adj['date_from'])
-                    date_to = pd.to_datetime(adj['date_to'])
-                    current_adj_mask = (result['ds'] >= date_from) & (result['ds'] <= date_to)
 
-                    if adj['metric'] == 'traffic':
-                        result.loc[current_adj_mask, 'traffic_forecast'] *= adj['coefficient']
-                    elif adj['metric'] == 'check':
-                        result.loc[current_adj_mask, 'check_forecast'] *= adj['coefficient']
-                    elif adj['metric'] == 'both':
-                        result.loc[current_adj_mask, 'traffic_forecast'] *= adj['coefficient']
-                        result.loc[current_adj_mask, 'check_forecast'] *= adj['coefficient']
+        return forecast_df
 
-                    adjusted_rows_mask |= current_adj_mask  # Accumulate masks of adjusted rows
+    def forecast_cafe(self, cafe, params):
+        """Прогнозирование для одного кафе"""
+        try:
+            # Фильтрация данных
+            df_cafe = self.df[self.df['Кафе'] == cafe].copy()
+            df_cafe = df_cafe.groupby('Дата').agg({
+                'Тр': 'sum',
+                'Чек': 'mean',
+                'Выручка': 'sum'
+            }).reset_index()
 
-            # Recalculate revenue for rows that were affected by any adjustment
-            if adjusted_rows_mask.any():
-                result.loc[adjusted_rows_mask, 'revenue_forecast'] = result.loc[
-                                                                         adjusted_rows_mask, 'traffic_forecast'] * \
-                                                                     result.loc[adjusted_rows_mask, 'check_forecast']
-                # Recalculate revenue bounds as well, using their original components.
-                # Assuming traffic_lower/upper and check_lower/upper are not directly adjusted by coefficient.
-                # If they were, that logic would need to be added above similar to forecasts.
-                result.loc[adjusted_rows_mask, 'revenue_lower'] = result.loc[adjusted_rows_mask, 'traffic_lower'] * \
-                                                                  result.loc[adjusted_rows_mask, 'check_lower']
-                result.loc[adjusted_rows_mask, 'revenue_upper'] = result.loc[adjusted_rows_mask, 'traffic_upper'] * \
-                                                                  result.loc[adjusted_rows_mask, 'check_upper']
+            # Удаление выбросов если включено
+            if params.get('remove_outliers', True):
+                multiplier = params.get('outlier_multiplier', 1.5)
+                df_cafe = self.remove_outliers(df_cafe, 'Тр', multiplier)
+                df_cafe = self.remove_outliers(df_cafe, 'Чек', multiplier)
 
-        # Расчет метрик качества для исторических данных
-        historical_mask = result['revenue_fact'].notna()
-        if historical_mask.sum() > 0:
-            # Метрики для выручки
-            revenue_metrics = self.calculate_metrics(
-                result.loc[historical_mask, 'revenue_fact'].values,
-                result.loc[historical_mask, 'revenue_forecast'].values
-            )
+            # Заполнение пропусков
+            df_cafe = df_cafe.set_index('Дата').asfreq('D').reset_index()
+            df_cafe['Тр'] = df_cafe['Тр'].fillna(df_cafe['Тр'].mean())
+            df_cafe['Чек'] = df_cafe['Чек'].fillna(df_cafe['Чек'].mean())
+            df_cafe['Выручка'] = df_cafe['Тр'] * df_cafe['Чек']
 
-            # Метрики для трафика
-            traffic_metrics = self.calculate_metrics(
-                result.loc[historical_mask, 'traffic_fact'].values,
-                result.loc[historical_mask, 'traffic_forecast'].values
-            )
+            # Выбор модели для прогнозирования
+            model_type = params.get('model_type', 'prophet')
 
-            # Метрики для среднего чека
-            check_metrics = self.calculate_metrics(
-                result.loc[historical_mask, 'check_fact'].values,
-                result.loc[historical_mask, 'check_forecast'].values
-            )
-
-            metrics_cache[cafe] = {
-                'MAPE_revenue': revenue_metrics['MAPE'],
-                'RMSE_revenue': revenue_metrics['RMSE'],
-                'MAPE_traffic': traffic_metrics['MAPE'],
-                'RMSE_traffic': traffic_metrics['RMSE'],
-                'MAPE_check': check_metrics['MAPE'],
-                'RMSE_check': check_metrics['RMSE']
+            # Автоматическая настройка гиперпараметров, если включена
+            if params.get('auto_tune', False):
+                # Словарь функций автонастройки для разных моделей
+                auto_tune_functions = {
+                    'prophet': self.auto_tune_prophet,
+                    'arima': self.auto_tune_arima,
+                    'xgboost': self.auto_tune_xgboost,
+                    'lstm': self.auto_tune_lstm
+                }
+                
+                # Выбираем нужную функцию автонастройки
+                auto_tune_func = auto_tune_functions.get(model_type)
+                
+                if auto_tune_func:
+                    # Число попыток оптимизации зависит от размера данных
+                    n_trials = 20 if len(df_cafe) < 365 else 50
+                    
+                    # Обновляем параметры в progress_queue, если есть функция обратного вызова
+                    progress_message = f"Автонастройка параметров для {cafe}, модель {model_type}..."
+                    progress_queue.put({
+                        'message': progress_message,
+                        'status': 'auto_tuning'
+                    })
+                    
+                    # Запускаем автонастройку для трафика
+                    traffic_tuning = auto_tune_func(df_cafe, 'Тр', params.copy(), n_trials)
+                    
+                    # Обновляем сообщение о прогрессе
+                    progress_message = f"Лучшая MAPE для трафика: {traffic_tuning['mape']:.2f}%"
+                    progress_queue.put({
+                        'message': progress_message,
+                        'status': 'auto_tuning'
+                    })
+                    
+                    # Запускаем автонастройку для среднего чека
+                    check_tuning = auto_tune_func(df_cafe, 'Чек', params.copy(), n_trials)
+                    
+                    # Обновляем сообщение о прогрессе
+                    progress_message = f"Лучшая MAPE для среднего чека: {check_tuning['mape']:.2f}%"
+                    progress_queue.put({
+                        'message': progress_message,
+                        'status': 'auto_tuning'
+                    })
+                    
+                    # Объединяем лучшие параметры из обеих автонастроек
+                    # В случае конфликта приоритет отдаем параметрам с лучшей метрикой
+                    if traffic_tuning['mape'] < check_tuning['mape']:
+                        params.update(traffic_tuning['params'])
+                    else:
+                        params.update(check_tuning['params'])
+                    
+                    # Сохраняем лучшие метрики
+                    if 'auto_tune_metrics' not in metrics_cache:
+                        metrics_cache['auto_tune_metrics'] = {}
+                    
+                    metrics_cache['auto_tune_metrics'][cafe] = {
+                        'traffic_mape': traffic_tuning['mape'],
+                        'check_mape': check_tuning['mape'],
+                        'params': params
+                    }
+    
+            # Словарь с функциями прогнозирования
+            forecast_functions = {
+                'prophet': self.forecast_prophet,
+                'arima': self.forecast_arima,
+                'xgboost': self.forecast_xgboost,
+                'lstm': self.forecast_lstm
             }
 
-        return result
+            forecast_func = forecast_functions.get(model_type, self.forecast_prophet)
 
-    except Exception as e:
-        print(f"Ошибка прогнозирования для {cafe}: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+            # Прогнозирование трафика
+            forecast_traffic = forecast_func(df_cafe, 'Тр', params)
 
+            # Прогнозирование среднего чека
+            forecast_check = forecast_func(df_cafe, 'Чек', params)
 
-def forecast_all(self, cafes, params, progress_callback=None):
-    """Прогнозирование для всех выбранных кафе"""
-    results = []
-    total = len(cafes)
+            # Объединение результатов
+            result = pd.DataFrame({
+                'ds': forecast_traffic['ds'],
+                'traffic_forecast': forecast_traffic['yhat'],
+                'traffic_lower': forecast_traffic['yhat_lower'],
+                'traffic_upper': forecast_traffic['yhat_upper'],
+                'check_forecast': forecast_check['yhat'],
+                'check_lower': forecast_check['yhat_lower'],
+                'check_upper': forecast_check['yhat_upper']
+            })
 
-    for i, cafe in enumerate(cafes):
-        if progress_callback:
-            progress_callback(i + 1, total, f"Обработка {cafe}")
+            # Расчет прогноза выручки
+            result['revenue_forecast'] = result['traffic_forecast'] * result['check_forecast']
+            result['revenue_lower'] = result['traffic_lower'] * result['check_lower']
+            result['revenue_upper'] = result['traffic_upper'] * result['check_upper']
 
-        result = self.forecast_cafe(cafe, params)
-        if result is not None:
-            results.append(result)
+            # Добавление фактических данных
+            result = result.merge(
+                df_cafe[['Дата', 'Тр', 'Чек', 'Выручка']].rename(columns={
+                    'Дата': 'ds',
+                    'Тр': 'traffic_fact',
+                    'Чек': 'check_fact',
+                    'Выручка': 'revenue_fact'
+                }),
+                on='ds',
+                how='left'
+            )
 
-    if results:
-        combined = pd.concat(results, ignore_index=True)
-        return combined
-    else:
-        return pd.DataFrame()
+            result['cafe'] = cafe
 
+            # Применение корректировок
+            if 'adjustments' in params and params['adjustments']:
+                adjusted_rows_mask = pd.Series(False, index=result.index) # Keep track of adjusted rows
 
-def prepare_export_data(self, forecast_df):
-    """Подготовка данных для экспорта в Excel"""
-    # Создаем копию для безопасности
-    export_df = forecast_df.copy()
+                for adj in params['adjustments']:
+                    if adj['cafe'] == cafe or adj['cafe'] == 'ALL':
+                        date_from = pd.to_datetime(adj['date_from'])
+                        date_to = pd.to_datetime(adj['date_to'])
+                        current_adj_mask = (result['ds'] >= date_from) & (result['ds'] <= date_to)
 
-    # Проверяем какие колонки есть в датафрейме
-    print("Доступные колонки в forecast_df:")
-    print(list(export_df.columns))
+                        if adj['metric'] == 'traffic':
+                            result.loc[current_adj_mask, 'traffic_forecast'] *= adj['coefficient']
+                        elif adj['metric'] == 'check':
+                            result.loc[current_adj_mask, 'check_forecast'] *= adj['coefficient']
+                        elif adj['metric'] == 'both':
+                            result.loc[current_adj_mask, 'traffic_forecast'] *= adj['coefficient']
+                            result.loc[current_adj_mask, 'check_forecast'] *= adj['coefficient']
+                        
+                        adjusted_rows_mask |= current_adj_mask # Accumulate masks of adjusted rows
 
-    # Переименовываем существующие колонки
-    rename_map = {
-        'ds': 'Дата',
-        'cafe': 'Кафе',
-        'traffic_fact': 'Трафик_факт',
-        'traffic_forecast': 'Трафик_прогноз',
-        'check_fact': 'Средний_чек_факт',
-        'check_forecast': 'Средний_чек_прогноз',
-        'revenue_fact': 'Выручка_факт',
-        'revenue_forecast': 'Выручка_прогноз',
-        'revenue_lower': 'Выручка_прогноз_мин',
-        'revenue_upper': 'Выручка_прогноз_макс'
-    }
+                # Recalculate revenue for rows that were affected by any adjustment
+                if adjusted_rows_mask.any():
+                    result.loc[adjusted_rows_mask, 'revenue_forecast'] = result.loc[adjusted_rows_mask, 'traffic_forecast'] * result.loc[adjusted_rows_mask, 'check_forecast']
+                    # Recalculate revenue bounds as well, using their original components.
+                    # Assuming traffic_lower/upper and check_lower/upper are not directly adjusted by coefficient.
+                    # If they were, that logic would need to be added above similar to forecasts.
+                    result.loc[adjusted_rows_mask, 'revenue_lower'] = result.loc[adjusted_rows_mask, 'traffic_lower'] * result.loc[adjusted_rows_mask, 'check_lower']
+                    result.loc[adjusted_rows_mask, 'revenue_upper'] = result.loc[adjusted_rows_mask, 'traffic_upper'] * result.loc[adjusted_rows_mask, 'check_upper']
 
-    # Переименовываем только существующие колонки
-    columns_to_rename = {}
-    for old_col, new_col in rename_map.items():
-        if old_col in export_df.columns:
-            columns_to_rename[old_col] = new_col
+            # Расчет метрик качества для исторических данных
+            historical_mask = result['revenue_fact'].notna()
+            if historical_mask.sum() > 0:
+                metrics = self.calculate_metrics(
+                    result.loc[historical_mask, 'revenue_fact'].values,
+                    result.loc[historical_mask, 'revenue_forecast'].values
+                )
+                metrics_cache[cafe] = metrics
 
-    export_df = export_df.rename(columns=columns_to_rename)
+            return result
 
-    # Список желаемых колонок для экспорта
-    desired_columns = [
-        'Дата', 'Кафе',
-        'Трафик_факт', 'Трафик_прогноз',
-        'Средний_чек_факт', 'Средний_чек_прогноз',
-        'Выручка_факт', 'Выручка_прогноз',
-        'Выручка_прогноз_мин', 'Выручка_прогноз_макс'
-    ]
+        except Exception as e:
+            print(f"Ошибка прогнозирования для {cafe}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
-    # Выбираем только существующие колонки
-    available_columns = [col for col in desired_columns if col in export_df.columns]
+    def forecast_all(self, cafes, params, progress_callback=None):
+        """Прогнозирование для всех выбранных кафе"""
+        results = []
+        total = len(cafes)
 
-    print(f"Колонки для экспорта: {available_columns}")
+        for i, cafe in enumerate(cafes):
+            if progress_callback:
+                progress_callback(i + 1, total, f"Обработка {cafe}")
 
-    return export_df[available_columns]
+            result = self.forecast_cafe(cafe, params)
+            if result is not None:
+                results.append(result)
+
+        if results:
+            combined = pd.concat(results, ignore_index=True)
+            return combined
+        else:
+            return pd.DataFrame()
+
+    def prepare_export_data(self, forecast_df):
+        """Подготовка данных для экспорта в Excel"""
+        # Создаем копию для безопасности
+        export_df = forecast_df.copy()
+
+        # Проверяем какие колонки есть в датафрейме
+        print("Доступные колонки в forecast_df:")
+        print(list(export_df.columns))
+
+        # Переименовываем существующие колонки
+        rename_map = {
+            'ds': 'Дата',
+            'cafe': 'Кафе',
+            'traffic_fact': 'Трафик_факт',
+            'traffic_forecast': 'Трафик_прогноз',
+            'check_fact': 'Средний_чек_факт',
+            'check_forecast': 'Средний_чек_прогноз',
+            'revenue_fact': 'Выручка_факт',
+            'revenue_forecast': 'Выручка_прогноз',
+            'revenue_lower': 'Выручка_прогноз_мин',
+            'revenue_upper': 'Выручка_прогноз_макс'
+        }
+
+        # Переименовываем только существующие колонки
+        columns_to_rename = {}
+        for old_col, new_col in rename_map.items():
+            if old_col in export_df.columns:
+                columns_to_rename[old_col] = new_col
+
+        export_df = export_df.rename(columns=columns_to_rename)
+
+        # Список желаемых колонок для экспорта
+        desired_columns = [
+            'Дата', 'Кафе',
+            'Трафик_факт', 'Трафик_прогноз',
+            'Средний_чек_факт', 'Средний_чек_прогноз',
+            'Выручка_факт', 'Выручка_прогноз',
+            'Выручка_прогноз_мин', 'Выручка_прогноз_макс'
+        ]
+
+        # Выбираем только существующие колонки
+        available_columns = [col for col in desired_columns if col in export_df.columns]
+
+        print(f"Колонки для экспорта: {available_columns}")
+
+        return export_df[available_columns]
 
 
 # Создание экземпляра движка
@@ -1069,7 +1019,7 @@ def get_initial_data():
             'weekly_seasonality': True,
             'daily_seasonality': False,
             'model_type': 'prophet',
-            'confidence_interval': 0.95,  # Default confidence interval
+            'confidence_interval': 0.95, # Default confidence interval
             'train_split': 0.8,
             'auto_tune': False
         }
@@ -1162,14 +1112,14 @@ def get_forecast_data():
             # If no dates from request or cache, default to current month
             today = datetime.now()
             effective_date_from = today.replace(day=1).strftime('%Y-%m-%d')
-
+            
             # Calculate last day of current month
             # Move to a day near the end of the month (e.g., 28th) to safely add days
             # then go to the 1st of next month, then subtract one day.
             next_month_start = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
             last_day_of_current_month = next_month_start - timedelta(days=1)
             effective_date_to = last_day_of_current_month.strftime('%Y-%m-%d')
-
+            
             # Note: We are not updating forecast_cache['params'] with these defaults here,
             # as the cache should ideally reflect explicit user choices or forecast run params.
 
@@ -1305,67 +1255,21 @@ def get_forecast_data():
                         'traffic_mape': round(metrics_cache['auto_tune_metrics'][cafe]['traffic_mape'], 2),
                         'check_mape': round(metrics_cache['auto_tune_metrics'][cafe]['check_mape'], 2)
                     }
-
-        # Расчет сводных данных для таблицы по кафе
-        cafe_summary_data = {}
-
-        if not df.empty:
-            today = pd.to_datetime(datetime.now().date())
-
-            for cafe in df['cafe'].unique():
-                cafe_df = df[df['cafe'] == cafe]
-
-                # Актуальные данные (прошлое и сегодня)
-                actual_df = cafe_df[cafe_df['ds'] <= today]
-                revenue_actual = actual_df['revenue_fact'].fillna(0).sum()
-                traffic_actual = actual_df['traffic_fact'].fillna(0).sum()
-
-                # Прогнозные данные (будущее)
-                forecast_df_cafe = cafe_df[cafe_df['ds'] > today]
-                revenue_forecast = forecast_df_cafe['revenue_forecast'].fillna(0).sum()
-                traffic_forecast = forecast_df_cafe['traffic_forecast'].fillna(0).sum()
-
-                # Общие данные
-                revenue_total = revenue_actual + revenue_forecast
-                traffic_total = traffic_actual + traffic_forecast
-
-                # Средние чеки
-                check_actual = revenue_actual / traffic_actual if traffic_actual > 0 else 0
-                check_forecast = revenue_forecast / traffic_forecast if traffic_forecast > 0 else 0
-                check_total = revenue_total / traffic_total if traffic_total > 0 else 0
-
-                cafe_summary_data[cafe] = {
-                    'revenue': {
-                        'actual': revenue_actual,
-                        'forecast': revenue_forecast,
-                        'total': revenue_total
-                    },
-                    'traffic': {
-                        'actual': traffic_actual,
-                        'forecast': traffic_forecast,
-                        'total': traffic_total
-                    },
-                    'check': {
-                        'actual': check_actual,
-                        'forecast': check_forecast,
-                        'total': check_total
-                    }
-                }
-
-        # Общие итоги по всем кафе
+        
+        # Расчет сводных данных для таблицы
         summary_data = {
             'revenue': {'actual': 0, 'forecast': 0, 'total': 0},
             'traffic': {'actual': 0, 'forecast': 0, 'total': 0}
         }
 
         if not df.empty:
-            today = pd.to_datetime(datetime.now().date())  # Дата без времени для корректного сравнения
-
+            today = pd.to_datetime(datetime.now().date()) # Дата без времени для корректного сравнения
+            
             # Фильтруем df еще раз, чтобы убедиться, что даты корректны для суммирования
             # Это важно, если df изначально содержал более широкий диапазон дат, чем date_from/date_to
-
-            current_period_df = df.copy()  # df уже отфильтрован по date_from и date_to
-
+            
+            current_period_df = df.copy() # df уже отфильтрован по date_from и date_to
+            
             # Актуальные данные (прошлое и сегодня в выбранном диапазоне)
             actual_df = current_period_df[current_period_df['ds'] <= today]
             summary_data['revenue']['actual'] = actual_df['revenue_fact'].fillna(0).sum()
@@ -1375,10 +1279,11 @@ def get_forecast_data():
             forecast_df_period = current_period_df[current_period_df['ds'] > today]
             summary_data['revenue']['forecast'] = forecast_df_period['revenue_forecast'].fillna(0).sum()
             summary_data['traffic']['forecast'] = forecast_df_period['traffic_forecast'].fillna(0).sum()
-
+            
             # Общие данные (факт за прошлое + прогноз на будущее в выбранном диапазоне)
             summary_data['revenue']['total'] = summary_data['revenue']['actual'] + summary_data['revenue']['forecast']
             summary_data['traffic']['total'] = summary_data['traffic']['actual'] + summary_data['traffic']['forecast']
+
 
         return jsonify({
             'data': traces,
@@ -1386,8 +1291,7 @@ def get_forecast_data():
             'metrics': metrics,
             'auto_tune_metrics': auto_tune_metrics,
             'params': forecast_params,
-            'summary_data': summary_data,
-            'cafe_summary_data': cafe_summary_data
+            'summary_data': summary_data
         })
 
     except Exception as e:
