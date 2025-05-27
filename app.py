@@ -25,6 +25,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error
 import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
+from scipy.stats import norm
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -434,7 +435,7 @@ class ForecastEngine:
             yearly_seasonality=params.get('yearly_seasonality', True),
             weekly_seasonality=params.get('weekly_seasonality', True),
             daily_seasonality=params.get('daily_seasonality', False),
-            interval_width=params.get('confidence_interval', 0.95)
+            interval_width=params.get('confidence_interval', 0.95) # Updated
         )
 
         m.fit(df_model)
@@ -468,13 +469,35 @@ class ForecastEngine:
             'yhat': pd.concat([pd.Series(data.values), forecast])
         })
 
-        # Добавляем доверительные интервалы (упрощенно)
-        confidence = params.get('confidence_interval', 0.95)
-        z_score = 1.96 if confidence == 0.95 else 2.58  # для 95% и 99%
-        std_error = np.std(model_fit.resid)
+        # Добавляем доверительные интервалы
+        confidence_interval = params.get('confidence_interval', 0.95)
+        alpha = 1 - confidence_interval
+        
+        # Получаем прогнозные значения и стандартные ошибки
+        forecast_results = model_fit.get_forecast(steps=forecast_steps)
+        forecast_values = forecast_results.predicted_mean
+        conf_int = forecast_results.conf_int(alpha=alpha) # ARIMA uses alpha
 
-        forecast_df['yhat_lower'] = forecast_df['yhat'] - z_score * std_error
-        forecast_df['yhat_upper'] = forecast_df['yhat'] + z_score * std_error
+        # Создаем DataFrame с прогнозом
+        forecast_df = pd.DataFrame({
+            'ds': pd.concat([df_cafe['Дата'], pd.Series(future_dates)]),
+            'yhat': pd.concat([pd.Series(data.values), forecast_values])
+        })
+        
+        # Добавляем границы доверительного интервала
+        # Убедимся, что существующие данные не получают интервалы, если они не были рассчитаны
+        yhat_lower = pd.Series([np.nan] * len(df_cafe))
+        yhat_upper = pd.Series([np.nan] * len(df_cafe))
+        
+        yhat_lower = pd.concat([yhat_lower, conf_int.iloc[:, 0]]).reset_index(drop=True)
+        yhat_upper = pd.concat([yhat_upper, conf_int.iloc[:, 1]]).reset_index(drop=True)
+
+        forecast_df['yhat_lower'] = yhat_lower
+        forecast_df['yhat_upper'] = yhat_upper
+        
+        # Заполняем NaN в yhat для исторических данных оригинальными значениями
+        forecast_df['yhat'] = forecast_df['yhat'].fillna(pd.Series(data.values, index=df_cafe.index[:len(data)]))
+
 
         return forecast_df
 
@@ -555,12 +578,18 @@ class ForecastEngine:
         })
 
         # Добавляем доверительные интервалы
-        std_error = np.std(y_train - model.predict(X_train))
-        confidence = params.get('confidence_interval', 0.95)
-        z_score = 1.96 if confidence == 0.95 else 2.58
+        std_error = np.std(y_train - model.predict(X_train)) # Оценка стандартной ошибки на обучающей выборке
+        confidence_interval = params.get('confidence_interval', 0.95)
+        z_score = norm.ppf((1 + confidence_interval) / 2)
 
         forecast_df['yhat_lower'] = forecast_df['yhat'] - z_score * std_error
         forecast_df['yhat_upper'] = forecast_df['yhat'] + z_score * std_error
+        
+        # Для исторических данных yhat_lower и yhat_upper могут быть NaN или равны yhat
+        historical_len = len(df_cafe[metric])
+        forecast_df.loc[:historical_len-1, 'yhat_lower'] = forecast_df.loc[:historical_len-1, 'yhat']
+        forecast_df.loc[:historical_len-1, 'yhat_upper'] = forecast_df.loc[:historical_len-1, 'yhat']
+
 
         return forecast_df
 
@@ -635,12 +664,32 @@ class ForecastEngine:
         })
 
         # Добавляем доверительные интервалы
-        std_error = np.std(data.flatten())
-        confidence = params.get('confidence_interval', 0.95)
-        z_score = 1.96 if confidence == 0.95 else 2.58
+        # Для LSTM оценка std_error может быть сложной.
+        # Используем стандартное отклонение остатков на обучающих данных, если возможно,
+        # или более простой эвристический подход.
+        # Здесь используется std обучающих данных y_train, что является грубой оценкой.
+        # Более точный подход потребовал бы оценки неопределенности модели (например, через dropout MC).
+        
+        # Расчет остатков на обучающей выборке
+        model.eval()
+        with torch.no_grad():
+            train_predictions = model(X_train).squeeze().numpy()
+        residuals = y_train.numpy() - train_predictions
+        std_error_train = np.std(residuals) # Используем std остатков на трейне
 
-        forecast_df['yhat_lower'] = forecast_df['yhat'] - z_score * std_error * 0.1
-        forecast_df['yhat_upper'] = forecast_df['yhat'] + z_score * std_error * 0.1
+        confidence_interval = params.get('confidence_interval', 0.95)
+        z_score = norm.ppf((1 + confidence_interval) / 2)
+
+        # Применяем интервалы только к прогнозной части
+        forecast_len = len(predictions)
+        hist_len = len(forecast_df) - forecast_len
+        
+        forecast_df['yhat_lower'] = forecast_df['yhat'] # по умолчанию
+        forecast_df['yhat_upper'] = forecast_df['yhat'] # по умолчанию
+
+        forecast_df.iloc[hist_len:, forecast_df.columns.get_loc('yhat_lower')] = forecast_df.iloc[hist_len:]['yhat'] - z_score * std_error_train
+        forecast_df.iloc[hist_len:, forecast_df.columns.get_loc('yhat_upper')] = forecast_df.iloc[hist_len:]['yhat'] + z_score * std_error_train
+
 
         return forecast_df
 
@@ -904,7 +953,7 @@ def get_initial_data():
             'weekly_seasonality': True,
             'daily_seasonality': False,
             'model_type': 'prophet',
-            'confidence_interval': 0.95,
+            'confidence_interval': 0.95, # Default confidence interval
             'train_split': 0.8,
             'auto_tune': False
         }
@@ -1120,13 +1169,43 @@ def get_forecast_data():
                         'traffic_mape': round(metrics_cache['auto_tune_metrics'][cafe]['traffic_mape'], 2),
                         'check_mape': round(metrics_cache['auto_tune_metrics'][cafe]['check_mape'], 2)
                     }
+        
+        # Расчет сводных данных для таблицы
+        summary_data = {
+            'revenue': {'actual': 0, 'forecast': 0, 'total': 0},
+            'traffic': {'actual': 0, 'forecast': 0, 'total': 0}
+        }
+
+        if not df.empty:
+            today = pd.to_datetime(datetime.now().date()) # Дата без времени для корректного сравнения
+            
+            # Фильтруем df еще раз, чтобы убедиться, что даты корректны для суммирования
+            # Это важно, если df изначально содержал более широкий диапазон дат, чем date_from/date_to
+            
+            current_period_df = df.copy() # df уже отфильтрован по date_from и date_to
+            
+            # Актуальные данные (прошлое и сегодня в выбранном диапазоне)
+            actual_df = current_period_df[current_period_df['ds'] <= today]
+            summary_data['revenue']['actual'] = actual_df['revenue_fact'].fillna(0).sum()
+            summary_data['traffic']['actual'] = actual_df['traffic_fact'].fillna(0).sum()
+
+            # Прогнозные данные (будущее в выбранном диапазоне)
+            forecast_df_period = current_period_df[current_period_df['ds'] > today]
+            summary_data['revenue']['forecast'] = forecast_df_period['revenue_forecast'].fillna(0).sum()
+            summary_data['traffic']['forecast'] = forecast_df_period['traffic_forecast'].fillna(0).sum()
+            
+            # Общие данные (факт за прошлое + прогноз на будущее в выбранном диапазоне)
+            summary_data['revenue']['total'] = summary_data['revenue']['actual'] + summary_data['revenue']['forecast']
+            summary_data['traffic']['total'] = summary_data['traffic']['actual'] + summary_data['traffic']['forecast']
+
 
         return jsonify({
             'data': traces,
             'layout': layout,
             'metrics': metrics,
             'auto_tune_metrics': auto_tune_metrics,
-            'params': forecast_params
+            'params': forecast_params,
+            'summary_data': summary_data
         })
 
     except Exception as e:

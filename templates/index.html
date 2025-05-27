@@ -299,11 +299,11 @@
                                 <span>Горизонт прогноза (дней)</span>
                                 <span class="slider-value" id="horizonValue">365</span>
                             </div>
-                            <input type="range" id="forecastHorizon" min="30" max="730" value="365" step="30">
+                            <input type="range" id="forecastHorizon" min="30" max="730" value="365" step="30" data-bs-toggle="tooltip" title="Период, на который делается прогноз">
                         </div>
 
                         <div class="form-check form-switch mb-3">
-                            <input class="form-check-input" type="checkbox" id="removeOutliers" checked>
+                            <input class="form-check-input" type="checkbox" id="removeOutliers" checked data-bs-toggle="tooltip" title="Удаляет аномальные точки данных, которые могут исказить прогноз">
                             <label class="form-check-label" for="removeOutliers">
                                 Удалять выбросы из данных
                             </label>
@@ -314,7 +314,15 @@
                                 <span>Чувствительность к выбросам</span>
                                 <span class="slider-value" id="outlierValue">1.5</span>
                             </div>
-                            <input type="range" id="outlierMultiplier" min="0.5" max="3" value="1.5" step="0.1">
+                            <input type="range" id="outlierMultiplier" min="0.5" max="3" value="1.5" step="0.1" data-bs-toggle="tooltip" title="Контролирует чувствительность обнаружения выбросов. Более высокие значения менее чувствительны.">
+                        </div>
+
+                        <div class="slider-container">
+                            <div class="slider-label">
+                                <span>Доверительный интервал (%)</span>
+                                <span class="slider-value" id="confIntervalValue">95</span>
+                            </div>
+                            <input type="range" id="confInterval" min="50" max="99" value="95" step="1" data-bs-toggle="tooltip" title="Уровень уверенности для прогноза. Например, 95% означает, что ожидается, что фактическое значение попадет в прогнозируемый диапазон в 95% случаев.">
                         </div>
                     </div>
 
@@ -324,7 +332,7 @@
                         </h5>
 
                         <div class="form-check form-switch mb-4">
-                            <input class="form-check-input" type="checkbox" id="autoTune">
+                            <input class="form-check-input" type="checkbox" id="autoTune" data-bs-toggle="tooltip" title="Автоматически подбирает лучшие настройки модели, но может занять больше времени.">
                             <label class="form-check-label" for="autoTune">
                                 Автоматическая настройка гиперпараметров
                             </label>
@@ -338,7 +346,7 @@
                                 <span>Доля обучающей выборки (%)</span>
                                 <span class="slider-value" id="trainSplitValue">80</span>
                             </div>
-                            <input type="range" id="trainSplit" min="50" max="90" value="80" step="5">
+                            <input type="range" id="trainSplit" min="50" max="90" value="80" step="5" data-bs-toggle="tooltip" title="Процент исторических данных, используемый для обучения модели.">
                             <small class="form-text text-muted d-block mt-1">
                                 Часть данных, используемая для обучения модели (50-90%)
                             </small>
@@ -346,7 +354,7 @@
                     
                         <div class="mb-4">
                             <label for="modelType" class="form-label">Модель прогнозирования</label>
-                            <select class="form-select" id="modelType">
+                            <select class="form-select" id="modelType" data-bs-toggle="tooltip" title="Prophet: универсальная модель. ARIMA: для стабильных данных. XGBoost: для сложных зависимостей. LSTM: для длинных рядов с сезонностью.">
                                 <option value="prophet" selected>Prophet</option>
                                 <option value="arima">ARIMA</option>
                                 <option value="xgboost">XGBoost</option>
@@ -362,7 +370,7 @@
                                 <span>Гибкость тренда</span>
                                 <span class="slider-value" id="trendValue">0.05</span>
                             </div>
-                            <input type="range" id="changepointPriorScale" min="0.001" max="0.5" value="0.05" step="0.001">
+                            <input type="range" id="changepointPriorScale" min="0.001" max="0.5" value="0.05" step="0.001" data-bs-toggle="tooltip" title="Prophet: Контролирует гибкость тренда. Более высокие значения делают тренд более гибким.">
                         </div>
                         
                         <div class="slider-container prophet-setting">
@@ -370,25 +378,25 @@
                                 <span>Сила сезонности</span>
                                 <span class="slider-value" id="seasonalityValue">10</span>
                             </div>
-                            <input type="range" id="seasonalityPriorScale" min="0.1" max="25" value="10" step="0.1">
+                            <input type="range" id="seasonalityPriorScale" min="0.1" max="25" value="10" step="0.1" data-bs-toggle="tooltip" title="Prophet: Контролирует, насколько сильно модель учитывает сезонные закономерности.">
                         </div>
 
                         <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="yearlySeasonality" checked>
+                            <input class="form-check-input" type="checkbox" id="yearlySeasonality" checked data-bs-toggle="tooltip" title="Prophet: Учитывает ежегодные повторяющиеся паттерны.">
                             <label class="form-check-label" for="yearlySeasonality">
                                 Годовая сезонность
                             </label>
                         </div>
 
                         <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="weeklySeasonality" checked>
+                            <input class="form-check-input" type="checkbox" id="weeklySeasonality" checked data-bs-toggle="tooltip" title="Prophet: Учитывает еженедельные повторяющиеся паттерны.">
                             <label class="form-check-label" for="weeklySeasonality">
                                 Недельная сезонность
                             </label>
                         </div>
 
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="dailySeasonality">
+                            <input class="form-check-input" type="checkbox" id="dailySeasonality" data-bs-toggle="tooltip" title="Prophet: Учитывает ежедневные повторяющиеся паттерны (если данные достаточно детализированы).">
                             <label class="form-check-label" for="dailySeasonality">
                                 Дневная сезонность
                             </label>
@@ -399,7 +407,7 @@
                         <h5 class="mb-3">
                             <i class="bi bi-sliders2-vertical"></i> Корректировки
                         </h5>
-                        <button class="btn btn-sm btn-outline-primary mb-3" id="addAdjustment">
+                        <button class="btn btn-sm btn-outline-primary mb-3" id="addAdjustment" data-bs-toggle="tooltip" title="Позволяет вручную скорректировать прогноз для известных предстоящих событий (например, промо-акций, праздников, не входящих в стандартный список).">
                             <i class="bi bi-plus-circle"></i> Добавить корректировку
                         </button>
                         <div id="adjustmentsList">
@@ -488,6 +496,40 @@
                         </div>
                         <p class="mt-2">Построение графика...</p>
                     </div>
+
+                    <div id="summaryTableContainer" class="mt-4">
+                        <h4 class="mb-3 section-title"><i class="bi bi-card-list"></i> Сводка по прогнозу</h4>
+                        <table class="table table-bordered table-striped">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Показатель</th>
+                                    <th>Факт (в выбранном периоде)</th>
+                                    <th>План (в выбранном периоде)</th>
+                                    <th>Итог (в выбранном периоде)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Выручка, ₽</td>
+                                    <td id="summaryRevenueActual">---</td>
+                                    <td id="summaryRevenueForecast">---</td>
+                                    <td id="summaryRevenueTotal">---</td>
+                                </tr>
+                                <tr>
+                                    <td>Трафик</td>
+                                    <td id="summaryTrafficActual">---</td>
+                                    <td id="summaryTrafficForecast">---</td>
+                                    <td id="summaryTrafficTotal">---</td>
+                                </tr>
+                                <tr>
+                                    <td>Средний чек, ₽</td>
+                                    <td id="summaryAvgCheckActual">---</td>
+                                    <td id="summaryAvgCheckForecast">---</td>
+                                    <td id="summaryAvgCheckTotal">---</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -556,6 +598,11 @@
             console.log('Инициализация приложения...');
             loadInitialData();
             setupEventHandlers();
+            // Инициализация тултипов Bootstrap
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            })
         });
 
         // Загрузка начальных данных
@@ -582,6 +629,11 @@
 
                     $('#outlierMultiplier').val(data.default_params.outlier_multiplier);
                     $('#outlierValue').text(data.default_params.outlier_multiplier);
+                    
+                    if (data.default_params.confidence_interval) {
+                        $('#confInterval').val(data.default_params.confidence_interval * 100);
+                        $('#confIntervalValue').text(data.default_params.confidence_interval * 100);
+                    }
 
                     $('#changepointPriorScale').val(data.default_params.changepoint_prior_scale);
                     $('#trendValue').text(data.default_params.changepoint_prior_scale);
@@ -688,6 +740,10 @@
 
             $('#outlierMultiplier').on('input', function() {
                 $('#outlierValue').text($(this).val());
+            });
+
+            $('#confInterval').on('input', function() {
+                $('#confIntervalValue').text($(this).val());
             });
 
             $('#changepointPriorScale').on('input', function() {
@@ -813,6 +869,7 @@
                 forecast_horizon: parseInt($('#forecastHorizon').val()),
                 remove_outliers: $('#removeOutliers').is(':checked'),
                 outlier_multiplier: parseFloat($('#outlierMultiplier').val()),
+                confidence_interval: parseFloat($('#confInterval').val()) / 100,
                 changepoint_prior_scale: parseFloat($('#changepointPriorScale').val()),
                 seasonality_prior_scale: parseFloat($('#seasonalityPriorScale').val()),
                 yearly_seasonality: $('#yearlySeasonality').is(':checked'),
@@ -924,6 +981,11 @@
                     };
 
                     Plotly.newPlot('plotlyChart', response.data, response.layout, config);
+                    if (response.summary_data) {
+                        renderSummaryTable(response.summary_data);
+                    } else {
+                        renderSummaryTable(null); // Clear table or show default
+                    }
                 } else {
                     $('#chartContainer').html(`
                         <div class="empty-state">
@@ -932,9 +994,11 @@
                             <p>Попробуйте изменить параметры или выбрать другие кафе.</p>
                         </div>
                     `);
+                    renderSummaryTable(null); // Clear table if no chart data
                 }
             }).fail(function(xhr, status, error) {
                 $('.loading-spinner').hide();
+                renderSummaryTable(null); // Clear table on error
                 const errorMsg = xhr.responseJSON ? xhr.responseJSON.error : 'Неизвестная ошибка';
                 console.error('Ошибка загрузки данных для графика:', errorMsg);
                 $('#chartContainer').html(`
@@ -971,6 +1035,11 @@
                 }
                 if (response.data && response.data.length > 0) {
                     Plotly.react('plotlyChart', response.data, response.layout);
+                    if (response.summary_data) {
+                        renderSummaryTable(response.summary_data);
+                    } else {
+                        renderSummaryTable(null);
+                    }
                 } else {
                      $('#chartContainer').html(`
                         <div class="empty-state">
@@ -978,12 +1047,61 @@
                             <h5>Нет данных для отображения по выбранным датам</h5>
                         </div>
                     `);
+                    renderSummaryTable(null);
                 }
             }).fail(function(xhr, status, error) {
                 $('.loading-spinner').hide();
                 const errorMsg = xhr.responseJSON ? xhr.responseJSON.error : 'Неизвестная ошибка';
                 alert('Ошибка при обновлении графика: ' + errorMsg);
+                renderSummaryTable(null);
             });
+        }
+
+        // Функция для отрисовки таблицы со сводными данными
+        function renderSummaryTable(summaryData) {
+            const formatNumber = (num, options = {}) => {
+                if (isNaN(num) || num === null || num === undefined) return '---';
+                return num.toLocaleString('ru-RU', options);
+            };
+
+            const defaultCell = '---';
+
+            if (!summaryData) {
+                $('#summaryRevenueActual').text(defaultCell);
+                $('#summaryRevenueForecast').text(defaultCell);
+                $('#summaryRevenueTotal').text(defaultCell);
+                $('#summaryTrafficActual').text(defaultCell);
+                $('#summaryTrafficForecast').text(defaultCell);
+                $('#summaryTrafficTotal').text(defaultCell);
+                $('#summaryAvgCheckActual').text(defaultCell);
+                $('#summaryAvgCheckForecast').text(defaultCell);
+                $('#summaryAvgCheckTotal').text(defaultCell);
+                return;
+            }
+
+            const revActual = summaryData.revenue.actual || 0;
+            const revForecast = summaryData.revenue.forecast || 0;
+            const revTotal = summaryData.revenue.total || 0;
+
+            const trafActual = summaryData.traffic.actual || 0;
+            const trafForecast = summaryData.traffic.forecast || 0;
+            const trafTotal = summaryData.traffic.total || 0;
+
+            $('#summaryRevenueActual').text(formatNumber(revActual, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            $('#summaryRevenueForecast').text(formatNumber(revForecast, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            $('#summaryRevenueTotal').text(formatNumber(revTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+            $('#summaryTrafficActual').text(formatNumber(trafActual, { maximumFractionDigits: 0 }));
+            $('#summaryTrafficForecast').text(formatNumber(trafForecast, { maximumFractionDigits: 0 }));
+            $('#summaryTrafficTotal').text(formatNumber(trafTotal, { maximumFractionDigits: 0 }));
+
+            const avgCheckActual = trafActual !== 0 ? revActual / trafActual : 0;
+            const avgCheckForecast = trafForecast !== 0 ? revForecast / trafForecast : 0;
+            const avgCheckTotal = trafTotal !== 0 ? revTotal / trafTotal : 0;
+
+            $('#summaryAvgCheckActual').text(formatNumber(avgCheckActual, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            $('#summaryAvgCheckForecast').text(formatNumber(avgCheckForecast, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            $('#summaryAvgCheckTotal').text(formatNumber(avgCheckTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
         }
     </script>
 </body>
