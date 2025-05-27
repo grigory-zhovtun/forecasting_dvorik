@@ -258,6 +258,74 @@
                 width: 100%;
             }
         }
+
+        /* Styles for the new Cafe Summary Table */
+        #cafeSummaryTable {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.85rem; /* Slightly smaller font for dense table */
+        }
+
+        #cafeSummaryTable th, #cafeSummaryTable td {
+            border: 1px solid #dee2e6; /* Standard Bootstrap border color */
+            padding: 0.4rem; /* Adjusted padding for density */
+            text-align: right;
+        }
+
+        #cafeSummaryTable th:first-child, #cafeSummaryTable td:first-child {
+            text-align: left;
+            font-weight: bold;
+            position: sticky; /* Make the first column sticky */
+            left: 0; /* Align to the left */
+            background-color: #f7f9fc; /* Match body background or a light color */
+            z-index: 1; /* Ensure it's above other cells */
+        }
+        
+        #cafeSummaryTable thead th {
+            background-color: #f8f9fa;
+            color: #212529;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        #cafeSummaryTable tfoot td {
+            font-weight: bold;
+            background-color: #f8f9fa;
+        }
+
+        /* Fact Columns Background */
+        #cafeSummaryTable th:nth-child(2), #cafeSummaryTable td:nth-child(2),
+        #cafeSummaryTable th:nth-child(3), #cafeSummaryTable td:nth-child(3),
+        #cafeSummaryTable th:nth-child(4), #cafeSummaryTable td:nth-child(4) {
+            background-color: #e0f2f7; /* Light Blue */
+        }
+
+        /* Plan Columns Background */
+        #cafeSummaryTable th:nth-child(5), #cafeSummaryTable td:nth-child(5),
+        #cafeSummaryTable th:nth-child(6), #cafeSummaryTable td:nth-child(6),
+        #cafeSummaryTable th:nth-child(7), #cafeSummaryTable td:nth-child(7) {
+            background-color: #ede7f6; /* Light Purple */
+        }
+
+        /* Total Columns Background */
+        #cafeSummaryTable th:nth-child(8), #cafeSummaryTable td:nth-child(8),
+        #cafeSummaryTable th:nth-child(9), #cafeSummaryTable td:nth-child(9),
+        #cafeSummaryTable th:nth-child(10), #cafeSummaryTable td:nth-child(10) {
+            background-color: #e8f5e9; /* Light Green */
+        }
+
+        /* Deviation % Columns Background */
+        #cafeSummaryTable th:nth-child(11), #cafeSummaryTable td:nth-child(11),
+        #cafeSummaryTable th:nth-child(12), #cafeSummaryTable td:nth-child(12),
+        #cafeSummaryTable th:nth-child(13), #cafeSummaryTable td:nth-child(13) {
+            background-color: #fff3e0; /* Light Orange */
+        }
+
+        /* Ensure sticky header and first column work well together */
+        #cafeSummaryTable thead th:first-child {
+            z-index: 2; /* Above other sticky cells */
+        }
+
     </style>
 </head>
 <body>
@@ -480,37 +548,46 @@
                         <p class="mt-2">Построение графика...</p>
                     </div>
 
-                    <div id="summaryTableContainer" class="mt-4">
-                        <h4 class="mb-3 section-title"><i class="bi bi-card-list"></i> Сводка по прогнозу</h4>
-                        <table class="table table-bordered table-striped">
+                    <div id="summaryTableContainer" class="mt-4" style="display: none;">
+                        <h4 class="mb-3 section-title"><i class="bi bi-card-list"></i> Сводка по прогнозу по кафе</h4>
+                        <table class="table table-bordered table-striped table-hover table-sm" id="cafeSummaryTable">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Показатель</th>
-                                    <th>Факт (в выбранном периоде)</th>
-                                    <th>План (в выбранном периоде)</th>
-                                    <th>Итог (в выбранном периоде)</th>
+                                    <th>Кафе</th>
+                                    <th>Факт (Выручка)</th>
+                                    <th>Факт (Трафик)</th>
+                                    <th>Факт (Средний чек)</th>
+                                    <th>План (Выручка)</th>
+                                    <th>План (Трафик)</th>
+                                    <th>План (Средний чек)</th>
+                                    <th>Итог (Выручка)</th>
+                                    <th>Итог (Трафик)</th>
+                                    <th>Итог (Средний чек)</th>
+                                    <th>Откл. % (Выручка)</th>
+                                    <th>Откл. % (Трафик)</th>
+                                    <th>Откл. % (Средний чек)</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                <tr>
-                                    <td>Выручка, ₽</td>
-                                    <td id="summaryRevenueActual">---</td>
-                                    <td id="summaryRevenueForecast">---</td>
-                                    <td id="summaryRevenueTotal">---</td>
-                                </tr>
-                                <tr>
-                                    <td>Трафик</td>
-                                    <td id="summaryTrafficActual">---</td>
-                                    <td id="summaryTrafficForecast">---</td>
-                                    <td id="summaryTrafficTotal">---</td>
-                                </tr>
-                                <tr>
-                                    <td>Средний чек, ₽</td>
-                                    <td id="summaryAvgCheckActual">---</td>
-                                    <td id="summaryAvgCheckForecast">---</td>
-                                    <td id="summaryAvgCheckTotal">---</td>
-                                </tr>
+                            <tbody id="cafeSummaryTableBody">
+                                <!-- Data rows will be inserted here by JavaScript -->
                             </tbody>
+                            <tfoot id="cafeSummaryTableFooter" class="table-light fw-bold">
+                                <tr>
+                                    <td>Итого</td>
+                                    <td id="totalFactRevenue">---</td>
+                                    <td id="totalFactTraffic">---</td>
+                                    <td id="totalFactAvgCheck">---</td>
+                                    <td id="totalPlanRevenue">---</td>
+                                    <td id="totalPlanTraffic">---</td>
+                                    <td id="totalPlanAvgCheck">---</td>
+                                    <td id="totalTotalRevenue">---</td>
+                                    <td id="totalTotalTraffic">---</td>
+                                    <td id="totalTotalAvgCheck">---</td>
+                                    <td id="totalDeviationRevenue">---</td>
+                                    <td id="totalDeviationTraffic">---</td>
+                                    <td id="totalDeviationAvgCheck">---</td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
 
@@ -979,11 +1056,13 @@
                     };
 
                     Plotly.newPlot('plotlyChart', response.data, response.layout, config);
-                    if (response.summary_data) {
-                        renderSummaryTable(response.summary_data);
-                    } else {
-                        renderSummaryTable(null); // Clear table or show default
-                    }
+                    // if (response.summary_data) {
+                    //     renderSummaryTable(response.summary_data);
+                    // } else {
+                    //     renderSummaryTable(null); // Clear table or show default
+                    // }
+                    renderCafeSummaryTable(response.cafe_summary_data); // New per-cafe summary table
+
                 } else {
                     $('#chartContainer').html(`
                         <div class="empty-state">
@@ -992,11 +1071,13 @@
                             <p>Попробуйте изменить параметры или выбрать другие кафе.</p>
                         </div>
                     `);
-                    renderSummaryTable(null); // Clear table if no chart data
+                    // renderSummaryTable(null); // Clear table if no chart data
+                    renderCafeSummaryTable(null); // Clear new per-cafe summary table
                 }
             }).fail(function(xhr, status, error) {
                 $('.loading-spinner').hide();
-                renderSummaryTable(null); // Clear table on error
+                // renderSummaryTable(null); // Clear table on error
+                renderCafeSummaryTable(null); // Clear new per-cafe summary table
                 const errorMsg = xhr.responseJSON ? xhr.responseJSON.error : 'Неизвестная ошибка';
                 console.error('Ошибка загрузки данных для графика:', errorMsg);
                 $('#chartContainer').html(`
@@ -1033,18 +1114,20 @@
                 }
                 if (response.data && response.data.length > 0) {
                     Plotly.react('plotlyChart', response.data, response.layout);
-                    if (response.summary_data) {
-                        renderSummaryTable(response.summary_data);
-                    } else {
-                        renderSummaryTable(null);
-                    }
+                    // if (response.summary_data) {
+                    //     renderSummaryTable(response.summary_data);
+                    // } else {
+                    //     renderSummaryTable(null);
+                    // }
+                    renderCafeSummaryTable(response.cafe_summary_data); // New per-cafe summary table
 
                     // Обновляем метрики качества
                     const metricsTable = $("#metricsTable");
                     metricsTable.empty(); // Clear previous metrics
+
                     if (response.metrics && Object.keys(response.metrics).length > 0) {
                         Object.entries(response.metrics).forEach(([cafe, cafeMetrics]) => {
-                            // Revenue
+                            // Revenue metrics row
                             let rowRevenue = $('<tr>');
                             rowRevenue.append($('<td>').attr('rowspan', 3).css('vertical-align', 'middle').text(cafe));
                             rowRevenue.append($('<td>').text('Выручка'));
@@ -1052,23 +1135,23 @@
                             rowRevenue.append($('<td>').text(cafeMetrics.RMSE_revenue !== null && cafeMetrics.RMSE_revenue !== undefined ? cafeMetrics.RMSE_revenue.toLocaleString('ru-RU') + " ₽" : "N/A"));
                             metricsTable.append(rowRevenue);
 
-                            // Traffic
+                            // Traffic metrics row
                             let rowTraffic = $('<tr>');
                             rowTraffic.append($('<td>').text('Трафик'));
                             rowTraffic.append($('<td>').text(cafeMetrics.MAPE_traffic !== null && cafeMetrics.MAPE_traffic !== undefined ? cafeMetrics.MAPE_traffic.toFixed(2) + "%" : "N/A"));
-                            rowTraffic.append($('<td>').text(cafeMetrics.RMSE_traffic !== null && cafeMetrics.RMSE_traffic !== undefined ? cafeMetrics.RMSE_traffic.toLocaleString('ru-RU') : "N/A"));
+                            rowTraffic.append($('<td>').text(cafeMetrics.RMSE_traffic !== null && cafeMetrics.RMSE_traffic !== undefined ? cafeMetrics.RMSE_traffic.toLocaleString('ru-RU') : "N/A")); // No ₽ for traffic RMSE
                             metricsTable.append(rowTraffic);
 
-                            // Check
+                            // Average Check metrics row
                             let rowCheck = $('<tr>');
                             rowCheck.append($('<td>').text('Средний чек'));
                             rowCheck.append($('<td>').text(cafeMetrics.MAPE_check !== null && cafeMetrics.MAPE_check !== undefined ? cafeMetrics.MAPE_check.toFixed(2) + "%" : "N/A"));
                             rowCheck.append($('<td>').text(cafeMetrics.RMSE_check !== null && cafeMetrics.RMSE_check !== undefined ? cafeMetrics.RMSE_check.toLocaleString('ru-RU') + " ₽" : "N/A"));
                             metricsTable.append(rowCheck);
                         });
-                        $("#metricsContainer").removeClass("d-none");
+                        $("#metricsContainer").removeClass("d-none"); // Show container if there are metrics
                     } else {
-                        $("#metricsContainer").addClass("d-none");
+                        $("#metricsContainer").addClass("d-none"); // Hide container if no metrics
                     }
 
                 } else {
@@ -1078,61 +1161,180 @@
                             <h5>Нет данных для отображения по выбранным датам</h5>
                         </div>
                     `);
-                    renderSummaryTable(null);
+                    // renderSummaryTable(null);
+                    renderCafeSummaryTable(null); // Clear new per-cafe summary table
                 }
             }).fail(function(xhr, status, error) {
                 $('.loading-spinner').hide();
                 const errorMsg = xhr.responseJSON ? xhr.responseJSON.error : 'Неизвестная ошибка';
                 alert('Ошибка при обновлении графика: ' + errorMsg);
-                renderSummaryTable(null);
+                // renderSummaryTable(null);
+                renderCafeSummaryTable(null); // Clear new per-cafe summary table
             });
         }
 
-        // Функция для отрисовки таблицы со сводными данными
-        function renderSummaryTable(summaryData) {
-            const formatNumber = (num, options = {}) => {
-                if (isNaN(num) || num === null || num === undefined) return '---';
-                return num.toLocaleString('ru-RU', options);
-            };
+        // Helper function for number formatting
+        function formatNumber(num, options = { style: 'decimal' }) {
+            if (num === null || num === undefined || isNaN(num)) return '---';
+            
+            let defaultOptions = { minimumFractionDigits: 0, maximumFractionDigits: 0 };
+            if (options.style === 'currency') {
+                defaultOptions = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+            } else if (options.style === 'percent') {
+                 defaultOptions = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
+            }
+
+
+            const mergedOptions = {...defaultOptions, ...options};
+            
+            // For percentages, multiply by 100 before formatting if not already done
+            // However, the calculation for deviation already does this, so we just format.
+            let valueToFormat = num;
+
+            let formattedNum = valueToFormat.toLocaleString('ru-RU', mergedOptions);
+            
+            if (options.style === 'percent') {
+                 // Add plus sign for positive percentages
+                if (valueToFormat > 0) formattedNum = "+" + formattedNum;
+                formattedNum += "%";
+            }
+             if (options.currencySymbol) {
+                formattedNum += " " + options.currencySymbol;
+            }
+            return formattedNum;
+        }
+
+
+        // Функция для отрисовки таблицы со сводными данными по кафе
+        function renderCafeSummaryTable(cafeSummaryData) {
+            const tableBody = $('#cafeSummaryTableBody');
+            const tableContainer = $('#summaryTableContainer');
+            tableBody.empty();
 
             const defaultCell = '---';
 
-            if (!summaryData) {
-                $('#summaryRevenueActual').text(defaultCell);
-                $('#summaryRevenueForecast').text(defaultCell);
-                $('#summaryRevenueTotal').text(defaultCell);
-                $('#summaryTrafficActual').text(defaultCell);
-                $('#summaryTrafficForecast').text(defaultCell);
-                $('#summaryTrafficTotal').text(defaultCell);
-                $('#summaryAvgCheckActual').text(defaultCell);
-                $('#summaryAvgCheckForecast').text(defaultCell);
-                $('#summaryAvgCheckTotal').text(defaultCell);
+            if (!cafeSummaryData || Object.keys(cafeSummaryData).length === 0) {
+                tableContainer.hide();
+                // Clear footer
+                $('#totalFactRevenue').text(defaultCell);
+                $('#totalFactTraffic').text(defaultCell);
+                $('#totalFactAvgCheck').text(defaultCell);
+                $('#totalPlanRevenue').text(defaultCell);
+                $('#totalPlanTraffic').text(defaultCell);
+                $('#totalPlanAvgCheck').text(defaultCell);
+                $('#totalTotalRevenue').text(defaultCell);
+                $('#totalTotalTraffic').text(defaultCell);
+                $('#totalTotalAvgCheck').text(defaultCell);
+                $('#totalDeviationRevenue').text(defaultCell);
+                $('#totalDeviationTraffic').text(defaultCell);
+                $('#totalDeviationAvgCheck').text(defaultCell);
                 return;
             }
+            tableContainer.show();
 
-            const revActual = summaryData.revenue.actual || 0;
-            const revForecast = summaryData.revenue.forecast || 0;
-            const revTotal = summaryData.revenue.total || 0;
+            let accFactRevenue = 0, accFactTraffic = 0;
+            let accPlanRevenue = 0, accPlanTraffic = 0;
+            let accTotalRevenue = 0, accTotalTraffic = 0;
 
-            const trafActual = summaryData.traffic.actual || 0;
-            const trafForecast = summaryData.traffic.forecast || 0;
-            const trafTotal = summaryData.traffic.total || 0;
+            for (const [cafeName, data] of Object.entries(cafeSummaryData)) {
+                const factRevenue = data.revenue.actual || 0;
+                const factTraffic = data.traffic.actual || 0;
+                const factAvgCheck = data.check.actual || 0;
 
-            $('#summaryRevenueActual').text(formatNumber(revActual, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            $('#summaryRevenueForecast').text(formatNumber(revForecast, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            $('#summaryRevenueTotal').text(formatNumber(revTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                const planRevenue = data.revenue.forecast || 0; // 'forecast' is used for plan
+                const planTraffic = data.traffic.forecast || 0;
+                const planAvgCheck = data.check.forecast || 0;
 
-            $('#summaryTrafficActual').text(formatNumber(trafActual, { maximumFractionDigits: 0 }));
-            $('#summaryTrafficForecast').text(formatNumber(trafForecast, { maximumFractionDigits: 0 }));
-            $('#summaryTrafficTotal').text(formatNumber(trafTotal, { maximumFractionDigits: 0 }));
+                const totalRevenue = data.revenue.total || 0;
+                const totalTraffic = data.traffic.total || 0;
+                const totalAvgCheck = data.check.total || 0;
 
-            const avgCheckActual = trafActual !== 0 ? revActual / trafActual : 0;
-            const avgCheckForecast = trafForecast !== 0 ? revForecast / trafForecast : 0;
-            const avgCheckTotal = trafTotal !== 0 ? revTotal / trafTotal : 0;
+                // Deviations
+                let devRevenueText = defaultCell, devRevenueClass = "";
+                if (planRevenue !== 0) {
+                    const devRevenue = ((factRevenue - planRevenue) / planRevenue) * 100;
+                    devRevenueText = formatNumber(devRevenue, {style: 'percent'});
+                    devRevenueClass = devRevenue > 0 ? "text-success" : (devRevenue < 0 ? "text-danger" : "");
+                }
 
-            $('#summaryAvgCheckActual').text(formatNumber(avgCheckActual, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            $('#summaryAvgCheckForecast').text(formatNumber(avgCheckForecast, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            $('#summaryAvgCheckTotal').text(formatNumber(avgCheckTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                let devTrafficText = defaultCell, devTrafficClass = "";
+                if (planTraffic !== 0) {
+                    const devTraffic = ((factTraffic - planTraffic) / planTraffic) * 100;
+                    devTrafficText = formatNumber(devTraffic, {style: 'percent'});
+                    devTrafficClass = devTraffic > 0 ? "text-success" : (devTraffic < 0 ? "text-danger" : "");
+                }
+
+                let devAvgCheckText = defaultCell, devAvgCheckClass = "";
+                if (planAvgCheck !== 0) {
+                    const devAvgCheck = ((factAvgCheck - planAvgCheck) / planAvgCheck) * 100;
+                    devAvgCheckText = formatNumber(devAvgCheck, {style: 'percent'});
+                    devAvgCheckClass = devAvgCheck > 0 ? "text-success" : (devAvgCheck < 0 ? "text-danger" : "");
+                }
+
+                const row = $('<tr>');
+                row.append($('<td>').text(cafeName));
+                row.append($('<td>').text(formatNumber(factRevenue, {style: 'currency', currencySymbol: '₽'})));
+                row.append($('<td>').text(formatNumber(factTraffic)));
+                row.append($('<td>').text(formatNumber(factAvgCheck, {style: 'currency', currencySymbol: '₽'})));
+                row.append($('<td>').text(formatNumber(planRevenue, {style: 'currency', currencySymbol: '₽'})));
+                row.append($('<td>').text(formatNumber(planTraffic)));
+                row.append($('<td>').text(formatNumber(planAvgCheck, {style: 'currency', currencySymbol: '₽'})));
+                row.append($('<td>').text(formatNumber(totalRevenue, {style: 'currency', currencySymbol: '₽'})));
+                row.append($('<td>').text(formatNumber(totalTraffic)));
+                row.append($('<td>').text(formatNumber(totalAvgCheck, {style: 'currency', currencySymbol: '₽'})));
+                row.append($('<td>').text(devRevenueText).addClass(devRevenueClass));
+                row.append($('<td>').text(devTrafficText).addClass(devTrafficClass));
+                row.append($('<td>').text(devAvgCheckText).addClass(devAvgCheckClass));
+                tableBody.append(row);
+
+                // Accumulate totals
+                accFactRevenue += factRevenue;
+                accFactTraffic += factTraffic;
+                accPlanRevenue += planRevenue;
+                accPlanTraffic += planTraffic;
+                accTotalRevenue += totalRevenue;
+                accTotalTraffic += totalTraffic;
+            }
+
+            // Calculate overall average checks for footer
+            const overallFactAvgCheck = accFactTraffic !== 0 ? accFactRevenue / accFactTraffic : 0;
+            const overallPlanAvgCheck = accPlanTraffic !== 0 ? accPlanRevenue / accPlanTraffic : 0;
+            const overallTotalAvgCheck = accTotalTraffic !== 0 ? accTotalRevenue / accTotalTraffic : 0;
+            
+            // Populate footer
+            $('#totalFactRevenue').text(formatNumber(accFactRevenue, {style: 'currency', currencySymbol: '₽'}));
+            $('#totalFactTraffic').text(formatNumber(accFactTraffic));
+            $('#totalFactAvgCheck').text(formatNumber(overallFactAvgCheck, {style: 'currency', currencySymbol: '₽'}));
+            $('#totalPlanRevenue').text(formatNumber(accPlanRevenue, {style: 'currency', currencySymbol: '₽'}));
+            $('#totalPlanTraffic').text(formatNumber(accPlanTraffic));
+            $('#totalPlanAvgCheck').text(formatNumber(overallPlanAvgCheck, {style: 'currency', currencySymbol: '₽'}));
+            $('#totalTotalRevenue').text(formatNumber(accTotalRevenue, {style: 'currency', currencySymbol: '₽'}));
+            $('#totalTotalTraffic').text(formatNumber(accTotalTraffic));
+            $('#totalTotalAvgCheck').text(formatNumber(overallTotalAvgCheck, {style: 'currency', currencySymbol: '₽'}));
+            
+            // Footer deviations - N/A for now as per instruction
+            $('#totalDeviationRevenue').text(defaultCell);
+            $('#totalDeviationTraffic').text(defaultCell);
+            $('#totalDeviationAvgCheck').text(defaultCell);
+        }
+
+
+        // Функция для отрисовки таблицы со сводными данными (СТАРАЯ, будет заменена/удалена)
+        function renderSummaryTable(summaryData) {
+            // const formatNumber = (num, options = {}) => { // Now a global helper
+            //     if (isNaN(num) || num === null || num === undefined) return '---';
+            //     return num.toLocaleString('ru-RU', options);
+            // };
+
+            const defaultCell = '---';
+
+            // This function is now largely obsolete due to renderCafeSummaryTable.
+            // If some aggregate summary (not per-cafe) is still needed, this might be repurposed.
+            // For now, its direct calls are commented out.
+            // If you need to clear the old summary table (if it was separate and still exists in HTML):
+            // $('#summaryRevenueActual').text(defaultCell);
+            // ... etc. for all old summary cells.
+            console.log("Old renderSummaryTable called, but it's being phased out for cafe-specific summary.");
         }
     </script>
 </body>
