@@ -94,14 +94,48 @@ class ForecastEngine:
 
     def load_holidays(self):
         """Загрузка праздников"""
-        try:
-            custom_holidays = pd.read_excel(self.holidays_path)
-        except:
-            custom_holidays = pd.DataFrame(columns=['ds', 'holiday'])
-
-        years = list(range(2020, 2027))
-        ru_holidays = make_holidays_df(year_list=years, country='RU')
-        self.holidays = pd.concat([custom_holidays, ru_holidays]).drop_duplicates().reset_index(drop=True)
+            # Сначала попробуем загрузить пользовательские праздники
+            try:
+                custom_holidays = pd.read_excel(self.holidays_path)
+                print(f"Загружено {len(custom_holidays)} пользовательских праздников из {self.holidays_path}")
+            except Exception as e:
+                print(f"Не удалось загрузить пользовательские праздники: {e}")
+                custom_holidays = pd.DataFrame(columns=['ds', 'holiday'])
+    
+            # Затем загружаем праздники из нашего предварительно созданного файла
+            ru_holidays = pd.DataFrame(columns=['ds', 'holiday'])
+            prophet_holidays_file = 'prophet_holidays_2020_2027.csv'
+            
+            try:
+                import os
+                if os.path.exists(prophet_holidays_file):
+                    ru_holidays = pd.read_csv(prophet_holidays_file)
+                    ru_holidays['ds'] = pd.to_datetime(ru_holidays['ds'])
+                    print(f"Загружено {len(ru_holidays)} российских праздников из файла {prophet_holidays_file}")
+                else:
+                    print(f"Файл {prophet_holidays_file} не найден, пробуем другие варианты...")
+                    
+                    # Пробуем файл с другим именем
+                    alternative_file = 'prophet_holidays_2020_2026.csv'
+                    if os.path.exists(alternative_file):
+                        ru_holidays = pd.read_csv(alternative_file)
+                        ru_holidays['ds'] = pd.to_datetime(ru_holidays['ds'])
+                        print(f"Загружено {len(ru_holidays)} российских праздников из файла {alternative_file}")
+                    else:
+                        # В крайнем случае, пробуем использовать встроенную функцию Prophet
+                        try:
+                            years = list(range(2020, 2027))
+                            ru_holidays = make_holidays_df(year_list=years, country='RU')
+                            print(f"Создано {len(ru_holidays)} российских праздников с помощью Prophet")
+                        except Exception as prophet_error:
+                            print(f"Не удалось создать праздники Prophet: {prophet_error}")
+                    
+            except Exception as e2:
+                print(f"Ошибка при загрузке праздников: {e2}")
+    
+            # Объединяем пользовательские и стандартные праздники
+            self.holidays = pd.concat([custom_holidays, ru_holidays]).drop_duplicates().reset_index(drop=True)
+            print(f"Всего праздников для использования в Prophet: {len(self.holidays)}")
 
     def classify_cafe(self, cafe):
         """Классификация кафе"""
