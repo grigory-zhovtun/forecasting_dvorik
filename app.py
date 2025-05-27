@@ -30,6 +30,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 import optuna
+import joblib # For Optuna parallelization
+from pickle import PicklingError # For joblib exception handling
 
 warnings.filterwarnings('ignore')
 logging.getLogger('prophet').setLevel(logging.WARNING)
@@ -203,7 +205,11 @@ class ForecastEngine:
         
         # Запускаем оптимизацию
         study = optuna.create_study(direction='minimize')
-        study.optimize(objective, n_trials=n_trials)
+        try:
+            study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError, PicklingError) as e: # type: ignore # noqa
+            print(f"Parallel Optuna execution failed for Prophet: {e}. Falling back to n_jobs=1.")
+            study.optimize(objective, n_trials=n_trials, n_jobs=1)
         
         # Лучшие параметры
         best_params = study.best_params
@@ -270,7 +276,11 @@ class ForecastEngine:
             
         # Запускаем оптимизацию
         study = optuna.create_study(direction='minimize')
-        study.optimize(objective, n_trials=n_trials)
+        try:
+            study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError, PicklingError) as e: # type: ignore # noqa
+            print(f"Parallel Optuna execution failed for XGBoost: {e}. Falling back to n_jobs=1.")
+            study.optimize(objective, n_trials=n_trials, n_jobs=1)
         
         # Лучшие параметры
         best_params = study.best_params
@@ -323,7 +333,11 @@ class ForecastEngine:
                 
         # Запускаем оптимизацию
         study = optuna.create_study(direction='minimize')
-        study.optimize(objective, n_trials=n_trials)
+        try:
+            study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError, PicklingError) as e: # type: ignore # noqa
+            print(f"Parallel Optuna execution failed for ARIMA: {e}. Falling back to n_jobs=1.")
+            study.optimize(objective, n_trials=n_trials, n_jobs=1)
         
         # Лучшие параметры
         best_params = study.best_params
@@ -402,7 +416,13 @@ class ForecastEngine:
             
         # Запускаем оптимизацию
         study = optuna.create_study(direction='minimize')
-        study.optimize(objective, n_trials=n_trials)
+        try:
+            # Note: LSTM with PyTorch can be tricky with pickling for n_jobs > 1.
+            # If issues arise, this might need to be n_jobs=1 or use a different joblib backend.
+            study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        except (joblib.externals.loky.process_executor.TerminatedWorkerError, TypeError, PicklingError) as e: # type: ignore # noqa
+            print(f"Parallel Optuna execution failed for LSTM: {e}. Falling back to n_jobs=1.")
+            study.optimize(objective, n_trials=n_trials, n_jobs=1)
         
         # Лучшие параметры
         best_params = study.best_params
