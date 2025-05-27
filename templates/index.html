@@ -413,23 +413,6 @@
                         <div id="adjustmentsList">
                             </div>
                     </div>
-                                                        
-                                                        <div id="metricsContainer" class="mt-4 d-none">
-                            <h5 class="mb-3">Метрики качества прогноза</h5>
-                            <div class="table-responsive">
-                                <table class="table table-bordered table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Кафе</th>
-                                            <th>MAPE, %</th>
-                                            <th>RMSE, ₽</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="metricsTable">
-                                    </tbody>
-                                </table>
-                            </div>
-                                                        </div>
 
                     <div class="mt-4 text-center">
                         <button class="btn btn-forecast" id="runForecast">
@@ -530,6 +513,26 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <div id="metricsContainer" class="mt-4 d-none">
+                        <h4 class="mb-3 section-title"><i class="bi bi-bar-chart-line"></i> Метрики качества прогноза</h4>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Кафе</th>
+                                        <th>Показатель</th>
+                                        <th>MAPE, %</th>
+                                        <th>RMSE</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="metricsTable">
+                                </tbody>
+                            </table>
+                        </div>
+                        <small class="text-muted">MAPE (Mean Absolute Percentage Error) - средняя абсолютная процентная ошибка. RMSE (Root Mean Square Error) - корень из среднеквадратичной ошибки.</small>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -910,27 +913,6 @@
                     console.log('Прогнозирование запущено:', response);
                     // Мониторинг прогресса
                     monitorProgress();
-                    
-                    // Обновляем метрики качества
-                    if (response.metrics && Object.keys(response.metrics).length > 0) {
-                        const metricsTable = $("#metricsTable");
-                        metricsTable.empty();
-                        
-                        Object.entries(response.metrics).forEach(([cafe, metrics]) => {
-                            const row = $("<tr>");
-                            row.append($("<td>").text(cafe));
-                            row.append($("<td>").text(metrics.MAPE ? metrics.MAPE.toFixed(2) + "%" : "N/A"));
-                            row.append($("<td>").text(metrics.RMSE ? metrics.RMSE.toLocaleString('ru-RU') + " ₽" : "N/A"));
-                            metricsTable.append(row);
-                        });
-                        
-                        $("#metricsContainer").removeClass("d-none");
-                    } else if (response.status === 'auto_tuning') {
-                        // Автонастройка гиперпараметров
-                        $("#progressMessage").html(`<i class="bi bi-gear-fill me-2"></i>${response.message || "Выполняется автонастройка..."}`);
-                    } else {
-                        $("#metricsContainer").addClass("d-none");
-                    }
                 },
                 error: function(xhr, status, error) {
                     console.error('Ошибка при запуске прогнозирования:', error);
@@ -1056,6 +1038,39 @@
                     } else {
                         renderSummaryTable(null);
                     }
+
+                    // Обновляем метрики качества
+                    const metricsTable = $("#metricsTable");
+                    metricsTable.empty(); // Clear previous metrics
+                    if (response.metrics && Object.keys(response.metrics).length > 0) {
+                        Object.entries(response.metrics).forEach(([cafe, cafeMetrics]) => {
+                            // Revenue
+                            let rowRevenue = $('<tr>');
+                            rowRevenue.append($('<td>').attr('rowspan', 3).css('vertical-align', 'middle').text(cafe));
+                            rowRevenue.append($('<td>').text('Выручка'));
+                            rowRevenue.append($('<td>').text(cafeMetrics.MAPE_revenue !== null && cafeMetrics.MAPE_revenue !== undefined ? cafeMetrics.MAPE_revenue.toFixed(2) + "%" : "N/A"));
+                            rowRevenue.append($('<td>').text(cafeMetrics.RMSE_revenue !== null && cafeMetrics.RMSE_revenue !== undefined ? cafeMetrics.RMSE_revenue.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            metricsTable.append(rowRevenue);
+
+                            // Traffic
+                            let rowTraffic = $('<tr>');
+                            rowTraffic.append($('<td>').text('Трафик'));
+                            rowTraffic.append($('<td>').text(cafeMetrics.MAPE_traffic !== null && cafeMetrics.MAPE_traffic !== undefined ? cafeMetrics.MAPE_traffic.toFixed(2) + "%" : "N/A"));
+                            rowTraffic.append($('<td>').text(cafeMetrics.RMSE_traffic !== null && cafeMetrics.RMSE_traffic !== undefined ? cafeMetrics.RMSE_traffic.toLocaleString('ru-RU') : "N/A"));
+                            metricsTable.append(rowTraffic);
+
+                            // Check
+                            let rowCheck = $('<tr>');
+                            rowCheck.append($('<td>').text('Средний чек'));
+                            rowCheck.append($('<td>').text(cafeMetrics.MAPE_check !== null && cafeMetrics.MAPE_check !== undefined ? cafeMetrics.MAPE_check.toFixed(2) + "%" : "N/A"));
+                            rowCheck.append($('<td>').text(cafeMetrics.RMSE_check !== null && cafeMetrics.RMSE_check !== undefined ? cafeMetrics.RMSE_check.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            metricsTable.append(rowCheck);
+                        });
+                        $("#metricsContainer").removeClass("d-none");
+                    } else {
+                        $("#metricsContainer").addClass("d-none");
+                    }
+
                 } else {
                      $('#chartContainer').html(`
                         <div class="empty-state">
