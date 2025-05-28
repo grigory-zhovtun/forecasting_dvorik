@@ -465,10 +465,34 @@
 
                     <div class="mt-4">
                         <h5 class="mb-3">
+                            <i class="bi bi-save"></i> Пресеты
+                        </h5>
+                        <div class="row mb-3">
+                            <div class="col-md-8">
+                                <select class="form-select" id="presetSelect">
+                                    <option value="">Выберите пресет...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-sm btn-outline-primary" id="loadPreset">
+                                    <i class="bi bi-download"></i> Загрузить
+                                </button>
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-success" id="savePreset">
+                            <i class="bi bi-save"></i> Сохранить как...
+                        </button>
+                    </div>
+
+                    <div class="mt-4">
+                        <h5 class="mb-3">
                             <i class="bi bi-sliders2-vertical"></i> Корректировки
                         </h5>
                         <button class="btn btn-sm btn-outline-primary mb-3" id="addAdjustment" data-bs-toggle="tooltip" title="Позволяет вручную скорректировать прогноз для известных предстоящих событий (например, промо-акций, праздников, не входящих в стандартный список).">
                             <i class="bi bi-plus-circle"></i> Добавить корректировку
+                        </button>
+                        <button class="btn btn-sm btn-outline-info mb-3 ms-2" id="viewAdjustments">
+                            <i class="bi bi-calendar3"></i> Менеджер корректировок
                         </button>
                         <div id="adjustmentsList">
                             </div>
@@ -602,7 +626,10 @@
                                         <th>Кафе</th>
                                         <th>Показатель</th>
                                         <th>MAPE, %</th>
+                                        <th>MAE</th>
                                         <th>RMSE</th>
+                                        <th>R²</th>
+                                        <th>Рекомендации</th>
                                     </tr>
                                 </thead>
                                 <tbody id="metricsTable">
@@ -612,6 +639,67 @@
                         <small class="text-muted">MAPE (Mean Absolute Percentage Error) - средняя абсолютная процентная ошибка. RMSE (Root Mean Square Error) - корень из среднеквадратичной ошибки.</small>
                     </div>
 
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для сохранения пресета -->
+    <div class="modal fade" id="savePresetModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Сохранить пресет</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Название пресета</label>
+                        <input type="text" class="form-control" id="presetName" 
+                               placeholder="Например: Прогноз на новый год">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание (опционально)</label>
+                        <textarea class="form-control" id="presetDescription" rows="3"
+                                  placeholder="Опишите особенности этого пресета"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" id="confirmSavePreset">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно менеджера корректировок -->
+    <div class="modal fade" id="adjustmentManagerModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Менеджер корректировок</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Кафе</th>
+                                    <th>Период</th>
+                                    <th>Метрика</th>
+                                    <th>Коэффициент</th>
+                                    <th>Причина</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adjustmentManagerTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
                 </div>
             </div>
         </div>
@@ -743,36 +831,27 @@
                     $('#weeklySeasonality').prop('checked', data.default_params.weekly_seasonality);
                     $('#dailySeasonality').prop('checked', data.default_params.daily_seasonality);
                 }
-
-                // Добавляем метрики автонастройки, если они есть
-                if (data.auto_tune_metrics && Object.keys(data.auto_tune_metrics).length > 0) {
-                    metricsHtml += '<h5 class="mt-4 mb-3">Результаты автонастройки</h5>';
-                    metricsHtml += '<div class="table-responsive"><table class="table table-sm table-bordered">';
-                    metricsHtml += '<thead><tr><th>Кафе</th><th>MAPE трафика (%)</th><th>MAPE среднего чека (%)</th></tr></thead><tbody>';
                 
-                    for (const cafe in data.auto_tune_metrics) {
-                        const metrics = data.auto_tune_metrics[cafe];
-                        metricsHtml += `<tr>
-                            <td>${cafe}</td>
-                            <td>${metrics.traffic_mape.toFixed(2)}%</td>
-                            <td>${metrics.check_mape.toFixed(2)}%</td>
-                        </tr>`;
-                    }
-                
-                    metricsHtml += '</tbody></table></div>';
-                    
-                    // Выводим информацию об использованных параметрах
-                    if (data.params && data.params.auto_tune) {
-                        metricsHtml += '<div class="alert alert-info mt-3">';
-                        metricsHtml += '<i class="bi bi-info-circle-fill me-2"></i>';
-                        metricsHtml += 'Для прогноза использованы оптимальные параметры, найденные автоматически';
-                        metricsHtml += '</div>';
-                    }
-                }
-                
+                // Загружаем список пресетов
+                loadPresets();
             }).fail(function(error) {
                 console.error('Ошибка загрузки данных:', error);
                 alert('Ошибка загрузки данных. Проверьте подключение к серверу.');
+            });
+        }
+        
+        // Функция загрузки пресетов
+        function loadPresets() {
+            $.get('/api/presets/list', function(data) {
+                const select = $('#presetSelect');
+                select.empty();
+                select.append('<option value="">Выберите пресет...</option>');
+                
+                if (data.presets && data.presets.length > 0) {
+                    data.presets.forEach(preset => {
+                        select.append(`<option value="${preset.id}">${preset.name}</option>`);
+                    });
+                }
             });
         }
 
@@ -831,6 +910,103 @@
 
         // Настройка обработчиков событий
         function setupEventHandlers() {
+            // Обработчики для пресетов
+            $('#savePreset').click(function() {
+                $('#savePresetModal').modal('show');
+            });
+            
+            $('#confirmSavePreset').click(function() {
+                const presetName = $('#presetName').val();
+                if (!presetName) {
+                    alert('Введите название пресета');
+                    return;
+                }
+                
+                const selectedCafes = $('.cafe-select:checked').map(function() {
+                    return $(this).val();
+                }).get();
+                
+                const params = {
+                    forecast_horizon: parseInt($('#forecastHorizon').val()),
+                    remove_outliers: $('#removeOutliers').is(':checked'),
+                    outlier_multiplier: parseFloat($('#outlierMultiplier').val()),
+                    confidence_interval: parseFloat($('#confInterval').val()) / 100,
+                    model_type: $('#modelType').val(),
+                    auto_tune: $('#autoTune').is(':checked'),
+                    train_split: parseFloat($('#trainSplit').val()) / 100,
+                    changepoint_prior_scale: parseFloat($('#changepointPriorScale').val()),
+                    seasonality_prior_scale: parseFloat($('#seasonalityPriorScale').val()),
+                    yearly_seasonality: $('#yearlySeasonality').is(':checked'),
+                    weekly_seasonality: $('#weeklySeasonality').is(':checked'),
+                    daily_seasonality: $('#dailySeasonality').is(':checked')
+                };
+                
+                $.ajax({
+                    url: '/api/presets/save',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        name: presetName,
+                        cafes: selectedCafes,
+                        params: params,
+                        adjustments: adjustments
+                    }),
+                    success: function() {
+                        $('#savePresetModal').modal('hide');
+                        $('#presetName').val('');
+                        loadPresets();
+                        alert('Пресет сохранен');
+                    },
+                    error: function() {
+                        alert('Ошибка сохранения пресета');
+                    }
+                });
+            });
+            
+            $('#loadPreset').click(function() {
+                const presetId = $('#presetSelect').val();
+                if (!presetId) {
+                    alert('Выберите пресет');
+                    return;
+                }
+                
+                $.get(`/api/presets/load/${presetId}`, function(data) {
+                    if (data.preset) {
+                        // Загружаем выбранные кафе
+                        $('.cafe-select').prop('checked', false);
+                        data.preset.cafes.forEach(cafe => {
+                            $(`.cafe-select[value="${cafe}"]`).prop('checked', true);
+                        });
+                        
+                        // Загружаем параметры
+                        const params = data.preset.params;
+                        $('#forecastHorizon').val(params.forecast_horizon).trigger('input');
+                        $('#removeOutliers').prop('checked', params.remove_outliers).trigger('change');
+                        $('#outlierMultiplier').val(params.outlier_multiplier).trigger('input');
+                        $('#confInterval').val(params.confidence_interval * 100).trigger('input');
+                        $('#modelType').val(params.model_type).trigger('change');
+                        $('#autoTune').prop('checked', params.auto_tune);
+                        $('#trainSplit').val(params.train_split * 100).trigger('input');
+                        $('#changepointPriorScale').val(params.changepoint_prior_scale).trigger('input');
+                        $('#seasonalityPriorScale').val(params.seasonality_prior_scale).trigger('input');
+                        $('#yearlySeasonality').prop('checked', params.yearly_seasonality);
+                        $('#weeklySeasonality').prop('checked', params.weekly_seasonality);
+                        $('#dailySeasonality').prop('checked', params.daily_seasonality);
+                        
+                        // Загружаем корректировки
+                        adjustments = data.preset.adjustments || [];
+                        renderAdjustments();
+                        
+                        alert('Пресет загружен');
+                    }
+                });
+            });
+            
+            // Обработчик для менеджера корректировок
+            $('#viewAdjustments').click(function() {
+                loadAdjustmentManager();
+                $('#adjustmentManagerModal').modal('show');
+            });
             // Слайдеры
             $('#forecastHorizon').on('input', function() {
                 $('#horizonValue').text($(this).val());
@@ -1140,6 +1316,49 @@
             });
         }
 
+        // Функция загрузки менеджера корректировок
+        function loadAdjustmentManager() {
+            $.get('/api/adjustments/list', function(data) {
+                const table = $('#adjustmentManagerTable');
+                table.empty();
+                
+                if (data.adjustments && data.adjustments.length > 0) {
+                    data.adjustments.forEach(adj => {
+                        const row = $(`
+                            <tr>
+                                <td>${adj.cafe}</td>
+                                <td>${new Date(adj.date_from).toLocaleDateString()} - ${new Date(adj.date_to).toLocaleDateString()}</td>
+                                <td>${adj.metric}</td>
+                                <td>${adj.coefficient}</td>
+                                <td>${adj.reason || '-'}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteAdjustmentFromDB(${adj.id})">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `);
+                        table.append(row);
+                    });
+                } else {
+                    table.append('<tr><td colspan="6" class="text-center">Нет сохраненных корректировок</td></tr>');
+                }
+            });
+        }
+        
+        // Функция удаления корректировки из БД
+        function deleteAdjustmentFromDB(id) {
+            if (confirm('Удалить корректировку?')) {
+                $.ajax({
+                    url: `/api/adjustments/delete/${id}`,
+                    method: 'DELETE',
+                    success: function() {
+                        loadAdjustmentManager();
+                    }
+                });
+            }
+        }
+
         // Обновление графика с фильтрами
         function updateChart() {
             const dateFrom = $('#dateFrom').val();
@@ -1191,7 +1410,26 @@
                             }
                             rowRevenue.append(mapeCellRevenue);
                             
-                            rowRevenue.append($('<td>').text(cafeMetrics.RMSE_revenue !== null && cafeMetrics.RMSE_revenue !== undefined ? cafeMetrics.RMSE_revenue.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            // MAE
+                            rowRevenue.append($('<td>').text(cafeMetrics.MAE_revenue !== null ? cafeMetrics.MAE_revenue.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            
+                            // RMSE
+                            rowRevenue.append($('<td>').text(cafeMetrics.RMSE_revenue !== null ? cafeMetrics.RMSE_revenue.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            
+                            // R²
+                            rowRevenue.append($('<td>').text(cafeMetrics.R2_revenue !== null ? cafeMetrics.R2_revenue.toFixed(4) : "N/A"));
+                            
+                            // Рекомендации
+                            let recCell = $('<td>').attr('rowspan', 3).css('vertical-align', 'middle');
+                            if (response.recommendations && response.recommendations[cafe]) {
+                                const rec = response.recommendations[cafe];
+                                const tooltip = rec.general_recommendations[0] || "Нет рекомендаций";
+                                recCell.html(`<i class="bi bi-info-circle text-primary" data-bs-toggle="tooltip" title="${tooltip}"></i>`);
+                                // Инициализируем новый tooltip
+                                new bootstrap.Tooltip(recCell.find('i')[0]);
+                            }
+                            rowRevenue.append(recCell);
+                            
                             metricsTable.append(rowRevenue);
 
                             // Traffic
@@ -1209,7 +1447,15 @@
                             }
                             rowTraffic.append(mapeCellTraffic);
                             
-                            rowTraffic.append($('<td>').text(cafeMetrics.RMSE_traffic !== null && cafeMetrics.RMSE_traffic !== undefined ? cafeMetrics.RMSE_traffic.toLocaleString('ru-RU') : "N/A"));
+                            // MAE
+                            rowTraffic.append($('<td>').text(cafeMetrics.MAE_traffic !== null ? cafeMetrics.MAE_traffic.toLocaleString('ru-RU') : "N/A"));
+                            
+                            // RMSE
+                            rowTraffic.append($('<td>').text(cafeMetrics.RMSE_traffic !== null ? cafeMetrics.RMSE_traffic.toLocaleString('ru-RU') : "N/A"));
+                            
+                            // R²
+                            rowTraffic.append($('<td>').text(cafeMetrics.R2_traffic !== null ? cafeMetrics.R2_traffic.toFixed(4) : "N/A"));
+                            
                             metricsTable.append(rowTraffic);
 
                             // Check
@@ -1227,7 +1473,15 @@
                             }
                             rowCheck.append(mapeCellCheck);
                             
-                            rowCheck.append($('<td>').text(cafeMetrics.RMSE_check !== null && cafeMetrics.RMSE_check !== undefined ? cafeMetrics.RMSE_check.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            // MAE
+                            rowCheck.append($('<td>').text(cafeMetrics.MAE_check !== null ? cafeMetrics.MAE_check.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            
+                            // RMSE
+                            rowCheck.append($('<td>').text(cafeMetrics.RMSE_check !== null ? cafeMetrics.RMSE_check.toLocaleString('ru-RU') + " ₽" : "N/A"));
+                            
+                            // R²
+                            rowCheck.append($('<td>').text(cafeMetrics.R2_check !== null ? cafeMetrics.R2_check.toFixed(4) : "N/A"));
+                            
                             metricsTable.append(rowCheck);
                         });
                         $("#metricsContainer").removeClass("d-none");
