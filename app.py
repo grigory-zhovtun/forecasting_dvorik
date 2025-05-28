@@ -44,6 +44,7 @@ forecast_cache = {}
 progress_queue = queue.Queue()
 current_task = None
 metrics_cache = {}
+cancel_flag = threading.Event()
 
 # LSTM модель для временных рядов
 class LSTMModel(nn.Module):
@@ -964,6 +965,11 @@ class ForecastEngine:
         total = len(cafes)
 
         for i, cafe in enumerate(cafes):
+            # Проверка флага отмены
+            if cancel_flag.is_set():
+                progress_queue.put({'status': 'cancelled'})
+                return pd.DataFrame()
+                
             if progress_callback:
                 progress_callback(i + 1, total, f"Обработка {cafe}")
 
@@ -1069,6 +1075,9 @@ def forecast():
     if not selected_cafes:
         return jsonify({'error': 'Не выбрано ни одного кафе'}), 400
 
+    # Сбрасываем флаг отмены
+    cancel_flag.clear()
+
     # Очищаем очередь прогресса
     while not progress_queue.empty():
         try:
@@ -1087,9 +1096,10 @@ def forecast():
             })
 
         result = engine.forecast_all(selected_cafes, params, progress_callback)
-        forecast_cache['latest'] = result
-        forecast_cache['params'] = params  # Сохраняем параметры для фильтрации
-        progress_queue.put({'status': 'complete'})
+        if not cancel_flag.is_set():  # Сохраняем результат только если не было отмены
+            forecast_cache['latest'] = result
+            forecast_cache['params'] = params  # Сохраняем параметры для фильтрации
+            progress_queue.put({'status': 'complete'})
 
     current_task = threading.Thread(target=run_forecast)
     current_task.start()
@@ -1105,6 +1115,27 @@ def get_progress():
         return jsonify(progress)
     except queue.Empty:
         return jsonify({'status': 'waiting'})
+
+
+@app.route('/api/cancel_forecast', methods=['POST'])
+def cancel_forecast():
+    """Отмена текущего прогнозирования"""
+    global current_task
+    
+    # Устанавливаем флаг отмены
+    cancel_flag.set()
+    
+    # Очищаем очередь прогресса
+    while not progress_queue.empty():
+        try:
+            progress_queue.get_nowait()
+        except:
+            break
+    
+    # Добавляем сообщение об отмене
+    progress_queue.put({'status': 'cancelled'})
+    
+    return jsonify({'status': 'cancelled'})
 
 
 @app.route('/api/get_forecast_data')
