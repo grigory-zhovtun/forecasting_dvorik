@@ -258,6 +258,40 @@
                 width: 100%;
             }
         }
+        /* Color groups for summary table */
+        .fact-group {
+            background-color: #e3f2fd !important;
+        }
+        
+        .plan-group {
+            background-color: #f3e5f5 !important;
+        }
+        
+        .total-group {
+            background-color: #e8f5e9 !important;
+        }
+        
+        .deviation-group {
+            background-color: #fff3e0 !important;
+        }
+        
+        thead th.fact-group,
+        thead th.plan-group,
+        thead th.total-group,
+        thead th.deviation-group {
+            font-weight: 600;
+        }
+        
+        tbody td.fact-group,
+        tbody td.plan-group,
+        tbody td.total-group,
+        tbody td.deviation-group,
+        tfoot td.fact-group,
+        tfoot td.plan-group,
+        tfoot td.total-group,
+        tfoot td.deviation-group {
+            background-color: inherit;
+        }
     </style>
 </head>
 <body>
@@ -482,36 +516,52 @@
 
                     <div id="summaryTableContainer" class="mt-4">
                         <h4 class="mb-3 section-title"><i class="bi bi-card-list"></i> Сводка по прогнозу</h4>
-                        <table class="table table-bordered table-striped">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Показатель</th>
-                                    <th>Факт (в выбранном периоде)</th>
-                                    <th>План (в выбранном периоде)</th>
-                                    <th>Итог (в выбранном периоде)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>Выручка, ₽</td>
-                                    <td id="summaryRevenueActual">---</td>
-                                    <td id="summaryRevenueForecast">---</td>
-                                    <td id="summaryRevenueTotal">---</td>
-                                </tr>
-                                <tr>
-                                    <td>Трафик</td>
-                                    <td id="summaryTrafficActual">---</td>
-                                    <td id="summaryTrafficForecast">---</td>
-                                    <td id="summaryTrafficTotal">---</td>
-                                </tr>
-                                <tr>
-                                    <td>Средний чек, ₽</td>
-                                    <td id="summaryAvgCheckActual">---</td>
-                                    <td id="summaryAvgCheckForecast">---</td>
-                                    <td id="summaryAvgCheckTotal">---</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-striped" id="cafeSummaryTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th rowspan="2">Кафе</th>
+                                        <th colspan="3" class="text-center fact-group">Факт</th>
+                                        <th colspan="3" class="text-center plan-group">План</th>
+                                        <th colspan="3" class="text-center total-group">Итог</th>
+                                        <th colspan="3" class="text-center deviation-group">Отклонение</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="fact-group">Выручка</th>
+                                        <th class="fact-group">Трафик</th>
+                                        <th class="fact-group">Средний чек</th>
+                                        <th class="plan-group">Выручка</th>
+                                        <th class="plan-group">Трафик</th>
+                                        <th class="plan-group">Средний чек</th>
+                                        <th class="total-group">Выручка</th>
+                                        <th class="total-group">Трафик</th>
+                                        <th class="total-group">Средний чек</th>
+                                        <th class="deviation-group">Выручка, %</th>
+                                        <th class="deviation-group">Трафик, %</th>
+                                        <th class="deviation-group">Средний чек, %</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cafeSummaryBody">
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <th>Итого</th>
+                                        <td id="totalRevenueActual" class="fact-group">---</td>
+                                        <td id="totalTrafficActual" class="fact-group">---</td>
+                                        <td id="totalAvgCheckActual" class="fact-group">---</td>
+                                        <td id="totalRevenueForecast" class="plan-group">---</td>
+                                        <td id="totalTrafficForecast" class="plan-group">---</td>
+                                        <td id="totalAvgCheckForecast" class="plan-group">---</td>
+                                        <td id="totalRevenueTotal" class="total-group">---</td>
+                                        <td id="totalTrafficTotal" class="total-group">---</td>
+                                        <td id="totalAvgCheckTotal" class="total-group">---</td>
+                                        <td id="totalRevenueDeviation" class="deviation-group">---</td>
+                                        <td id="totalTrafficDeviation" class="deviation-group">---</td>
+                                        <td id="totalAvgCheckDeviation" class="deviation-group">---</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </div>
 
                     <div id="metricsContainer" class="mt-4 d-none">
@@ -1094,45 +1144,98 @@
                 if (isNaN(num) || num === null || num === undefined) return '---';
                 return num.toLocaleString('ru-RU', options);
             };
+            
+            const calculateDeviation = (actual, forecast) => {
+                if (forecast === 0) return 0;
+                return ((actual - forecast) / forecast) * 100;
+            };
 
             const defaultCell = '---';
+            const tbody = $('#cafeSummaryBody');
+            tbody.empty();
 
-            if (!summaryData) {
-                $('#summaryRevenueActual').text(defaultCell);
-                $('#summaryRevenueForecast').text(defaultCell);
-                $('#summaryRevenueTotal').text(defaultCell);
-                $('#summaryTrafficActual').text(defaultCell);
-                $('#summaryTrafficForecast').text(defaultCell);
-                $('#summaryTrafficTotal').text(defaultCell);
-                $('#summaryAvgCheckActual').text(defaultCell);
-                $('#summaryAvgCheckForecast').text(defaultCell);
-                $('#summaryAvgCheckTotal').text(defaultCell);
+            if (!summaryData || !summaryData.cafes) {
+                // Clear totals
+                $('#totalRevenueActual').text(defaultCell);
+                $('#totalRevenueForecast').text(defaultCell);
+                $('#totalRevenueTotal').text(defaultCell);
+                $('#totalTrafficActual').text(defaultCell);
+                $('#totalTrafficForecast').text(defaultCell);
+                $('#totalTrafficTotal').text(defaultCell);
+                $('#totalAvgCheckActual').text(defaultCell);
+                $('#totalAvgCheckForecast').text(defaultCell);
+                $('#totalAvgCheckTotal').text(defaultCell);
+                $('#totalRevenueDeviation').text(defaultCell);
+                $('#totalTrafficDeviation').text(defaultCell);
+                $('#totalAvgCheckDeviation').text(defaultCell);
                 return;
             }
 
-            const revActual = summaryData.revenue.actual || 0;
-            const revForecast = summaryData.revenue.forecast || 0;
-            const revTotal = summaryData.revenue.total || 0;
+            // Populate cafe rows
+            Object.entries(summaryData.cafes).forEach(([cafe, data]) => {
+                const revActual = data.revenue.actual || 0;
+                const revForecast = data.revenue.forecast || 0;
+                const revTotal = data.revenue.total || 0;
+                const trafActual = data.traffic.actual || 0;
+                const trafForecast = data.traffic.forecast || 0;
+                const trafTotal = data.traffic.total || 0;
+                
+                const avgCheckActual = trafActual !== 0 ? revActual / trafActual : 0;
+                const avgCheckForecast = trafForecast !== 0 ? revForecast / trafForecast : 0;
+                const avgCheckTotal = trafTotal !== 0 ? revTotal / trafTotal : 0;
+                
+                const revDeviation = calculateDeviation(revActual, revForecast);
+                const trafDeviation = calculateDeviation(trafActual, trafForecast);
+                const checkDeviation = calculateDeviation(avgCheckActual, avgCheckForecast);
+                
+                const row = $('<tr>');
+                row.append($('<td>').text(cafe));
+                row.append($('<td>').addClass('fact-group').text(formatNumber(revActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('fact-group').text(formatNumber(trafActual, { maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('fact-group').text(formatNumber(avgCheckActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('plan-group').text(formatNumber(revForecast, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('plan-group').text(formatNumber(trafForecast, { maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('plan-group').text(formatNumber(avgCheckForecast, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('total-group').text(formatNumber(revTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('total-group').text(formatNumber(trafTotal, { maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('total-group').text(formatNumber(avgCheckTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('deviation-group').text(revDeviation !== 0 ? formatNumber(revDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'));
+                row.append($('<td>').addClass('deviation-group').text(trafDeviation !== 0 ? formatNumber(trafDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'));
+                row.append($('<td>').addClass('deviation-group').text(checkDeviation !== 0 ? formatNumber(checkDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'));
+                tbody.append(row);
+            });
 
-            const trafActual = summaryData.traffic.actual || 0;
-            const trafForecast = summaryData.traffic.forecast || 0;
-            const trafTotal = summaryData.traffic.total || 0;
-
-            $('#summaryRevenueActual').text(formatNumber(revActual, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            $('#summaryRevenueForecast').text(formatNumber(revForecast, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            $('#summaryRevenueTotal').text(formatNumber(revTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-
-            $('#summaryTrafficActual').text(formatNumber(trafActual, { maximumFractionDigits: 0 }));
-            $('#summaryTrafficForecast').text(formatNumber(trafForecast, { maximumFractionDigits: 0 }));
-            $('#summaryTrafficTotal').text(formatNumber(trafTotal, { maximumFractionDigits: 0 }));
-
-            const avgCheckActual = trafActual !== 0 ? revActual / trafActual : 0;
-            const avgCheckForecast = trafForecast !== 0 ? revForecast / trafForecast : 0;
-            const avgCheckTotal = trafTotal !== 0 ? revTotal / trafTotal : 0;
-
-            $('#summaryAvgCheckActual').text(formatNumber(avgCheckActual, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            $('#summaryAvgCheckForecast').text(formatNumber(avgCheckForecast, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            $('#summaryAvgCheckTotal').text(formatNumber(avgCheckTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            // Update totals
+            if (summaryData.total) {
+                const totalData = summaryData.total;
+                const revActual = totalData.revenue.actual || 0;
+                const revForecast = totalData.revenue.forecast || 0;
+                const revTotal = totalData.revenue.total || 0;
+                const trafActual = totalData.traffic.actual || 0;
+                const trafForecast = totalData.traffic.forecast || 0;
+                const trafTotal = totalData.traffic.total || 0;
+                
+                const avgCheckActual = trafActual !== 0 ? revActual / trafActual : 0;
+                const avgCheckForecast = trafForecast !== 0 ? revForecast / trafForecast : 0;
+                const avgCheckTotal = trafTotal !== 0 ? revTotal / trafTotal : 0;
+                
+                const revDeviation = calculateDeviation(revActual, revForecast);
+                const trafDeviation = calculateDeviation(trafActual, trafForecast);
+                const checkDeviation = calculateDeviation(avgCheckActual, avgCheckForecast);
+                
+                $('#totalRevenueActual').text(formatNumber(revActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalRevenueForecast').text(formatNumber(revForecast, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalRevenueTotal').text(formatNumber(revTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalTrafficActual').text(formatNumber(trafActual, { maximumFractionDigits: 0 }));
+                $('#totalTrafficForecast').text(formatNumber(trafForecast, { maximumFractionDigits: 0 }));
+                $('#totalTrafficTotal').text(formatNumber(trafTotal, { maximumFractionDigits: 0 }));
+                $('#totalAvgCheckActual').text(formatNumber(avgCheckActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalAvgCheckForecast').text(formatNumber(avgCheckForecast, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalAvgCheckTotal').text(formatNumber(avgCheckTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalRevenueDeviation').text(revDeviation !== 0 ? formatNumber(revDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0');
+                $('#totalTrafficDeviation').text(trafDeviation !== 0 ? formatNumber(trafDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0');
+                $('#totalAvgCheckDeviation').text(checkDeviation !== 0 ? formatNumber(checkDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0');
+            }
         }
     </script>
 </body>

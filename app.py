@@ -911,12 +911,44 @@ class ForecastEngine:
 
             # Расчет метрик качества для исторических данных
             historical_mask = result['revenue_fact'].notna()
+            cafe_metrics = {}
+            
             if historical_mask.sum() > 0:
-                metrics = self.calculate_metrics(
+                # Метрики для выручки
+                revenue_metrics = self.calculate_metrics(
                     result.loc[historical_mask, 'revenue_fact'].values,
                     result.loc[historical_mask, 'revenue_forecast'].values
                 )
-                metrics_cache[cafe] = metrics
+                cafe_metrics['MAPE_revenue'] = revenue_metrics['MAPE']
+                cafe_metrics['RMSE_revenue'] = revenue_metrics['RMSE']
+                
+                # Метрики для трафика
+                traffic_mask = result['traffic_fact'].notna() & result['traffic_forecast'].notna()
+                if traffic_mask.sum() > 0:
+                    traffic_metrics = self.calculate_metrics(
+                        result.loc[traffic_mask, 'traffic_fact'].values,
+                        result.loc[traffic_mask, 'traffic_forecast'].values
+                    )
+                    cafe_metrics['MAPE_traffic'] = traffic_metrics['MAPE']
+                    cafe_metrics['RMSE_traffic'] = traffic_metrics['RMSE']
+                else:
+                    cafe_metrics['MAPE_traffic'] = None
+                    cafe_metrics['RMSE_traffic'] = None
+                
+                # Метрики для среднего чека
+                check_mask = result['check_fact'].notna() & result['check_forecast'].notna()
+                if check_mask.sum() > 0:
+                    check_metrics = self.calculate_metrics(
+                        result.loc[check_mask, 'check_fact'].values,
+                        result.loc[check_mask, 'check_forecast'].values
+                    )
+                    cafe_metrics['MAPE_check'] = check_metrics['MAPE']
+                    cafe_metrics['RMSE_check'] = check_metrics['RMSE']
+                else:
+                    cafe_metrics['MAPE_check'] = None
+                    cafe_metrics['RMSE_check'] = None
+                    
+                metrics_cache[cafe] = cafe_metrics
 
             return result
 
@@ -1258,31 +1290,56 @@ def get_forecast_data():
         
         # Расчет сводных данных для таблицы
         summary_data = {
-            'revenue': {'actual': 0, 'forecast': 0, 'total': 0},
-            'traffic': {'actual': 0, 'forecast': 0, 'total': 0}
+            'cafes': {},
+            'total': {
+                'revenue': {'actual': 0, 'forecast': 0, 'total': 0},
+                'traffic': {'actual': 0, 'forecast': 0, 'total': 0}
+            }
         }
 
         if not df.empty:
             today = pd.to_datetime(datetime.now().date()) # Дата без времени для корректного сравнения
             
-            # Фильтруем df еще раз, чтобы убедиться, что даты корректны для суммирования
-            # Это важно, если df изначально содержал более широкий диапазон дат, чем date_from/date_to
-            
             current_period_df = df.copy() # df уже отфильтрован по date_from и date_to
             
-            # Актуальные данные (прошлое и сегодня в выбранном диапазоне)
-            actual_df = current_period_df[current_period_df['ds'] <= today]
-            summary_data['revenue']['actual'] = actual_df['revenue_fact'].fillna(0).sum()
-            summary_data['traffic']['actual'] = actual_df['traffic_fact'].fillna(0).sum()
-
-            # Прогнозные данные (будущее в выбранном диапазоне)
-            forecast_df_period = current_period_df[current_period_df['ds'] > today]
-            summary_data['revenue']['forecast'] = forecast_df_period['revenue_forecast'].fillna(0).sum()
-            summary_data['traffic']['forecast'] = forecast_df_period['traffic_forecast'].fillna(0).sum()
-            
-            # Общие данные (факт за прошлое + прогноз на будущее в выбранном диапазоне)
-            summary_data['revenue']['total'] = summary_data['revenue']['actual'] + summary_data['revenue']['forecast']
-            summary_data['traffic']['total'] = summary_data['traffic']['actual'] + summary_data['traffic']['forecast']
+            # Рассчитываем данные для каждого кафе
+            for cafe in df['cafe'].unique():
+                cafe_df = current_period_df[current_period_df['cafe'] == cafe]
+                
+                # Актуальные данные (прошлое и сегодня в выбранном диапазоне)
+                actual_df = cafe_df[cafe_df['ds'] <= today]
+                revenue_actual = actual_df['revenue_fact'].fillna(0).sum()
+                traffic_actual = actual_df['traffic_fact'].fillna(0).sum()
+                
+                # Прогнозные данные (будущее в выбранном диапазоне)
+                forecast_df_period = cafe_df[cafe_df['ds'] > today]
+                revenue_forecast = forecast_df_period['revenue_forecast'].fillna(0).sum()
+                traffic_forecast = forecast_df_period['traffic_forecast'].fillna(0).sum()
+                
+                # Общие данные
+                revenue_total = revenue_actual + revenue_forecast
+                traffic_total = traffic_actual + traffic_forecast
+                
+                summary_data['cafes'][cafe] = {
+                    'revenue': {
+                        'actual': revenue_actual,
+                        'forecast': revenue_forecast,
+                        'total': revenue_total
+                    },
+                    'traffic': {
+                        'actual': traffic_actual,
+                        'forecast': traffic_forecast,
+                        'total': traffic_total
+                    }
+                }
+                
+                # Добавляем к общим итогам
+                summary_data['total']['revenue']['actual'] += revenue_actual
+                summary_data['total']['revenue']['forecast'] += revenue_forecast
+                summary_data['total']['revenue']['total'] += revenue_total
+                summary_data['total']['traffic']['actual'] += traffic_actual
+                summary_data['total']['traffic']['forecast'] += traffic_forecast
+                summary_data['total']['traffic']['total'] += traffic_total
 
 
         return jsonify({
