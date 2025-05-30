@@ -300,6 +300,46 @@ class DataLoader:
         
         return df_filtered
     
+    def load_passport_data(self) -> pd.DataFrame:
+        """
+        Загрузка данных паспорта кафе
+        
+        Returns:
+            DataFrame с данными паспорта
+        """
+        try:
+            passport_file = os.path.join('data', 'passport.xlsx')
+            if os.path.exists(passport_file):
+                passport_df = pd.read_excel(passport_file)
+                logger.info(f"Загружены данные паспорта для {len(passport_df)} кафе")
+                return passport_df
+            else:
+                logger.warning("Файл паспорта не найден")
+                return pd.DataFrame()
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке данных паспорта: {e}")
+            return pd.DataFrame()
+    
+    def get_cafe_passport(self, cafe_name: str) -> dict:
+        """
+        Получение данных паспорта для конкретного кафе
+        
+        Args:
+            cafe_name: Название кафе
+            
+        Returns:
+            Словарь с данными паспорта
+        """
+        passport_df = self.load_passport_data()
+        if passport_df.empty:
+            return {}
+        
+        cafe_data = passport_df[passport_df['cafe'] == cafe_name]
+        if cafe_data.empty:
+            return {}
+        
+        return cafe_data.iloc[0].to_dict()
+    
     def prepare_for_forecast(self, cafe_df: pd.DataFrame, remove_outliers: bool = True, 
                            outlier_multiplier: float = 1.5) -> pd.DataFrame:
         """

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ForecastViews:
     """Класс для управления представлениями и маршрутами"""
     
-    def __init__(self, app, config: dict, data_loader, forecast_engine, preset_manager):
+    def __init__(self, app, config: dict, data_loader, forecast_engine):
         """
         Инициализация представлений
         
@@ -28,13 +28,11 @@ class ForecastViews:
             config: Конфигурация
             data_loader: Экземпляр DataLoader
             forecast_engine: Экземпляр ForecastEngine
-            preset_manager: Экземпляр PresetManager
         """
         self.app = app
         self.config = config
         self.data_loader = data_loader
         self.forecast_engine = forecast_engine
-        self.preset_manager = preset_manager
         
         # Кэши и очереди
         self.forecast_cache = {}
@@ -42,6 +40,10 @@ class ForecastViews:
         self.progress_queue = queue.Queue()
         self.current_task = None
         self.cancel_flag = threading.Event()
+        
+        # Добавляем хранилища для результатов
+        self.app.forecast_results = {}
+        self.app.adjusted_forecast_results = {}
         
         # Регистрация маршрутов
         self._register_routes()
@@ -60,16 +62,15 @@ class ForecastViews:
         self.app.route('/api/export_excel')(self.export_excel)
         self.app.route('/api/get_recommendations', methods=['POST'])(self.get_recommendations)
         
-        # Маршруты для пресетов
-        self.app.route('/api/presets/list')(self.list_presets)
-        self.app.route('/api/presets/load/<int:preset_id>')(self.load_preset)
-        self.app.route('/api/presets/save', methods=['POST'])(self.save_preset)
-        self.app.route('/api/presets/delete/<int:preset_id>', methods=['DELETE'])(self.delete_preset)
         
         # Маршруты для корректировок
         self.app.route('/api/adjustments/list')(self.list_adjustments)
         self.app.route('/api/adjustments/save', methods=['POST'])(self.save_adjustment)
         self.app.route('/api/adjustments/delete/<int:adjustment_id>', methods=['DELETE'])(self.delete_adjustment)
+        self.app.route('/api/apply_adjustments', methods=['POST'])(self.apply_adjustments)
+        
+        # Маршрут для паспорта
+        self.app.route('/api/passport_data')(self.get_passport_data)
     
     def index(self):
         """Главная страница"""
@@ -241,67 +242,226 @@ class ForecastViews:
             return jsonify({'error': str(e)}), 500
     
     def _prepare_plot_traces(self, df: pd.DataFrame) -> List[dict]:
-        """Подготовка данных для графика Plotly"""
+        """Подготовка данных для графика Plotly с агрегированием по всем кафе"""
         traces = []
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
         
-        for idx, cafe in enumerate(df['cafe'].unique()):
-            cafe_data = df[df['cafe'] == cafe].sort_values('ds')
-            color = colors[idx % len(colors)]
+        # Агрегируем данные по всем кафе
+        df_agg = df.groupby('ds').agg({
+            'revenue_fact': 'sum',
+            'revenue_forecast': 'sum',
+            'revenue_upper': 'sum',
+            'revenue_lower': 'sum'
+        }).reset_index()
+        
+        # Факт (агрегированный)
+        fact_data = df_agg[df_agg['revenue_fact'].notna()].sort_values('ds')
+        if not fact_data.empty:
+            traces.append({
+                'x': fact_data['ds'].dt.strftime('%Y-%m-%d').tolist(),
+                'y': fact_data['revenue_fact'].round(2).tolist(),
+                'name': 'Факт (все кафе)',
+                'type': 'scatter',
+                'mode': 'lines',
+                'line': {'width': 3, 'color': '#1f77b4'},
+                'hovertemplate': '<b>%{fullData.name}</b><br>' +
+                               'Дата: %{x}<br>' +
+                               'Выручка: %{y:,.0f} ₽<br>' +
+                               '<extra></extra>'
+            })
             
-            # Факт
-            fact_data = cafe_data[cafe_data['revenue_fact'].notna()]
-            if not fact_data.empty:
-                traces.append({
-                    'x': fact_data['ds'].dt.strftime('%Y-%m-%d').tolist(),
-                    'y': fact_data['revenue_fact'].round(2).tolist(),
-                    'name': f'{cafe} - Факт',
-                    'type': 'scatter',
-                    'mode': 'lines',
-                    'line': {'width': 2.5, 'color': color},
-                    'hovertemplate': '<b>%{fullData.name}</b><br>' +
-                                   'Дата: %{x}<br>' +
-                                   'Выручка: %{y:,.0f} ₽<br>' +
-                                   '<extra></extra>'
-                })
+            # Добавляем линию тренда для фактических данных
+            import numpy as np
+            from sklearn.linear_model import LinearRegression
             
-            # Прогноз
-            forecast_data = cafe_data[cafe_data['revenue_forecast'].notna()]
-            if not forecast_data.empty:
-                traces.append({
-                    'x': forecast_data['ds'].dt.strftime('%Y-%m-%d').tolist(),
-                    'y': forecast_data['revenue_forecast'].round(2).tolist(),
-                    'name': f'{cafe} - Прогноз',
-                    'type': 'scatter',
-                    'mode': 'lines',
-                    'line': {'width': 2.5, 'dash': 'dash', 'color': color},
-                    'hovertemplate': '<b>%{fullData.name}</b><br>' +
-                                   'Дата: %{x}<br>' +
-                                   'Прогноз: %{y:,.0f} ₽<br>' +
-                                   '<extra></extra>'
-                })
-                
-                # Доверительный интервал
-                x_values = forecast_data['ds'].dt.strftime('%Y-%m-%d').tolist()
-                y_upper = forecast_data['revenue_upper'].round(2).tolist()
-                y_lower = forecast_data['revenue_lower'].round(2).tolist()
-                
-                x_rev = x_values[::-1]
-                y_lower_rev = y_lower[::-1]
-                
-                traces.append({
-                    'x': x_values + x_rev,
-                    'y': y_upper + y_lower_rev,
-                    'fill': 'toself',
-                    'fillcolor': f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)',
-                    'line': {'color': 'transparent'},
-                    'showlegend': False,
-                    'name': f'{cafe} - Интервал',
-                    'type': 'scatter',
-                    'hoverinfo': 'skip'
-                })
+            # Преобразуем даты в числовой формат для регрессии
+            x_numeric = np.arange(len(fact_data)).reshape(-1, 1)
+            y_values = fact_data['revenue_fact'].values
+            
+            # Обучаем модель линейной регрессии
+            lr = LinearRegression()
+            lr.fit(x_numeric, y_values)
+            trend_values = lr.predict(x_numeric)
+            
+            traces.append({
+                'x': fact_data['ds'].dt.strftime('%Y-%m-%d').tolist(),
+                'y': trend_values.round(2).tolist(),
+                'name': 'Тренд',
+                'type': 'scatter',
+                'mode': 'lines',
+                'line': {'width': 2, 'dash': 'dot', 'color': '#ff7f0e'},
+                'hovertemplate': '<b>%{fullData.name}</b><br>' +
+                               'Дата: %{x}<br>' +
+                               'Тренд: %{y:,.0f} ₽<br>' +
+                               '<extra></extra>'
+            })
+        
+        # Прогноз (агрегированный)
+        forecast_data = df_agg[df_agg['revenue_forecast'].notna()].sort_values('ds')
+        if not forecast_data.empty:
+            traces.append({
+                'x': forecast_data['ds'].dt.strftime('%Y-%m-%d').tolist(),
+                'y': forecast_data['revenue_forecast'].round(2).tolist(),
+                'name': 'Прогноз (все кафе)',
+                'type': 'scatter',
+                'mode': 'lines',
+                'line': {'width': 3, 'dash': 'dash', 'color': '#2ca02c'},
+                'hovertemplate': '<b>%{fullData.name}</b><br>' +
+                               'Дата: %{x}<br>' +
+                               'Прогноз: %{y:,.0f} ₽<br>' +
+                               '<extra></extra>'
+            })
+            
+            # Доверительный интервал
+            x_values = forecast_data['ds'].dt.strftime('%Y-%m-%d').tolist()
+            y_upper = forecast_data['revenue_upper'].round(2).tolist()
+            y_lower = forecast_data['revenue_lower'].round(2).tolist()
+            
+            x_rev = x_values[::-1]
+            y_lower_rev = y_lower[::-1]
+            
+            traces.append({
+                'x': x_values + x_rev,
+                'y': y_upper + y_lower_rev,
+                'fill': 'toself',
+                'fillcolor': 'rgba(44, 160, 44, 0.2)',
+                'line': {'color': 'transparent'},
+                'showlegend': False,
+                'name': 'Доверительный интервал',
+                'type': 'scatter',
+                'hoverinfo': 'skip'
+            })
         
         return traces
+    
+    def apply_adjustments(self):
+        """Применение корректировок к данным прогноза"""
+        try:
+            data = request.get_json()
+            adjustments = data.get('adjustments', [])
+            
+            # Получаем текущие данные прогноза
+            session_id = request.cookies.get('session_id')
+            if not session_id or session_id not in self.app.forecast_results:
+                return jsonify({'error': 'Нет данных прогноза'}), 404
+            
+            # Копируем исходные данные
+            original_df = self.app.forecast_results[session_id].copy()
+            adjusted_df = original_df.copy()
+            
+            # Применяем корректировки
+            for adj in adjustments:
+                cafe = adj.get('cafe')
+                metric = adj.get('metric')
+                adj_type = adj.get('type')
+                value = adj.get('value')
+                date_from = pd.to_datetime(adj.get('dateFrom'))
+                date_to = pd.to_datetime(adj.get('dateTo'))
+                
+                # Фильтр по кафе
+                if cafe == 'ALL':
+                    mask = (adjusted_df['ds'] >= date_from) & (adjusted_df['ds'] <= date_to)
+                else:
+                    mask = (adjusted_df['cafe'] == cafe) & (adjusted_df['ds'] >= date_from) & (adjusted_df['ds'] <= date_to)
+                
+                # Применяем корректировку
+                if metric == 'revenue':
+                    if adj_type == 'percent':
+                        adjusted_df.loc[mask, 'revenue_forecast'] *= (1 + value / 100)
+                    else:
+                        adjusted_df.loc[mask, 'revenue_forecast'] += value
+                elif metric == 'traffic':
+                    if adj_type == 'percent':
+                        adjusted_df.loc[mask, 'traffic_forecast'] *= (1 + value / 100)
+                    else:
+                        adjusted_df.loc[mask, 'traffic_forecast'] += value
+                elif metric == 'avg_check':
+                    if adj_type == 'percent':
+                        adjusted_df.loc[mask, 'avg_check_forecast'] *= (1 + value / 100)
+                    else:
+                        adjusted_df.loc[mask, 'avg_check_forecast'] += value
+                
+                # Пересчитываем выручку если изменили трафик или чек
+                if metric in ['traffic', 'avg_check']:
+                    adjusted_df.loc[mask, 'revenue_forecast'] = (
+                        adjusted_df.loc[mask, 'traffic_forecast'] * 
+                        adjusted_df.loc[mask, 'avg_check_forecast']
+                    )
+            
+            # Сохраняем скорректированные данные
+            self.app.adjusted_forecast_results[session_id] = adjusted_df
+            
+            # Подготавливаем данные для графика
+            traces = self._prepare_plot_traces(adjusted_df)
+            layout = self._prepare_plot_layout()
+            
+            # Подготавливаем сводные данные
+            summary_data = self._prepare_summary_data(adjusted_df)
+            
+            return jsonify({
+                'data': traces,
+                'layout': layout,
+                'summary_data': summary_data
+            })
+            
+        except Exception as e:
+            logger.error(f"Ошибка при применении корректировок: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    def _prepare_summary_data(self, df: pd.DataFrame) -> dict:
+        """Подготовка сводных данных для таблицы"""
+        summary = {'cafes': {}, 'total': {}}
+        
+        for cafe in df['cafe'].unique():
+            cafe_data = df[df['cafe'] == cafe]
+            
+            # Считаем суммы по факту и прогнозу
+            fact_revenue = cafe_data['revenue_fact'].sum()
+            forecast_revenue = cafe_data['revenue_forecast'].sum()
+            fact_traffic = cafe_data['traffic_fact'].sum()
+            forecast_traffic = cafe_data['traffic_forecast'].sum()
+            
+            # Средний чек
+            fact_avg_check = fact_revenue / fact_traffic if fact_traffic > 0 else 0
+            forecast_avg_check = forecast_revenue / forecast_traffic if forecast_traffic > 0 else 0
+            
+            summary['cafes'][cafe] = {
+                'revenue': {
+                    'actual': fact_revenue,
+                    'forecast': forecast_revenue,
+                    'total': fact_revenue + forecast_revenue
+                },
+                'traffic': {
+                    'actual': fact_traffic,
+                    'forecast': forecast_traffic,
+                    'total': fact_traffic + forecast_traffic
+                },
+                'avg_check': {
+                    'actual': fact_avg_check,
+                    'forecast': forecast_avg_check,
+                    'total': (fact_avg_check + forecast_avg_check) / 2
+                }
+            }
+        
+        # Общие итоги
+        total_fact_revenue = df['revenue_fact'].sum()
+        total_forecast_revenue = df['revenue_forecast'].sum()
+        total_fact_traffic = df['traffic_fact'].sum()
+        total_forecast_traffic = df['traffic_forecast'].sum()
+        
+        summary['total'] = {
+            'revenue': {
+                'actual': total_fact_revenue,
+                'forecast': total_forecast_revenue,
+                'total': total_fact_revenue + total_forecast_revenue
+            },
+            'traffic': {
+                'actual': total_fact_traffic,
+                'forecast': total_forecast_traffic,
+                'total': total_fact_traffic + total_forecast_traffic
+            }
+        }
+        
+        return summary
     
     def _prepare_plot_layout(self) -> dict:
         """Подготовка layout для графика Plotly"""
@@ -552,88 +712,76 @@ class ForecastViews:
             logger.error(f"Ошибка при получении рекомендаций: {e}")
             return jsonify({'error': str(e)}), 500
     
-    def list_presets(self):
-        """Получение списка пресетов"""
-        try:
-            presets = self.preset_manager.list_presets()
-            return jsonify({'presets': presets})
-        except Exception as e:
-            logger.error(f"Ошибка при получении списка пресетов: {e}")
-            return jsonify({'error': str(e)}), 500
-    
-    def load_preset(self, preset_id: int):
-        """Загрузка пресета"""
-        try:
-            preset = self.preset_manager.load_preset(preset_id)
-            if preset:
-                return jsonify({'preset': preset})
-            else:
-                return jsonify({'error': 'Пресет не найден'}), 404
-        except Exception as e:
-            logger.error(f"Ошибка при загрузке пресета: {e}")
-            return jsonify({'error': str(e)}), 500
-    
-    def save_preset(self):
-        """Сохранение пресета"""
-        try:
-            data = request.json
-            preset_id = self.preset_manager.save_preset(
-                name=data.get('name'),
-                cafes=data.get('cafes', []),
-                params=data.get('params', {}),
-                adjustments=data.get('adjustments', [])
-            )
-            return jsonify({'preset_id': preset_id})
-        except Exception as e:
-            logger.error(f"Ошибка при сохранении пресета: {e}")
-            return jsonify({'error': str(e)}), 500
-    
-    def delete_preset(self, preset_id: int):
-        """Удаление пресета"""
-        try:
-            success = self.preset_manager.delete_preset(preset_id)
-            if success:
-                return jsonify({'status': 'success'})
-            else:
-                return jsonify({'error': 'Пресет не найден'}), 404
-        except Exception as e:
-            logger.error(f"Ошибка при удалении пресета: {e}")
-            return jsonify({'error': str(e)}), 500
-    
     def list_adjustments(self):
         """Получение списка корректировок"""
-        try:
-            adjustments = self.preset_manager.list_adjustments()
-            return jsonify({'adjustments': adjustments})
-        except Exception as e:
-            logger.error(f"Ошибка при получении списка корректировок: {e}")
-            return jsonify({'error': str(e)}), 500
+        # Временная заглушка
+        return jsonify({'adjustments': []})
     
     def save_adjustment(self):
         """Сохранение корректировки"""
-        try:
-            data = request.json
-            adjustment_id = self.preset_manager.save_adjustment(
-                cafe=data.get('cafe'),
-                date_from=data.get('date_from'),
-                date_to=data.get('date_to'),
-                metric=data.get('metric'),
-                coefficient=data.get('coefficient'),
-                reason=data.get('reason')
-            )
-            return jsonify({'adjustment_id': adjustment_id})
-        except Exception as e:
-            logger.error(f"Ошибка при сохранении корректировки: {e}")
-            return jsonify({'error': str(e)}), 500
+        # Временная заглушка
+        return jsonify({'adjustment_id': 1})
     
     def delete_adjustment(self, adjustment_id: int):
         """Удаление корректировки"""
+        # Временная заглушка
+        return jsonify({'status': 'success'})
+    
+    def get_passport_data(self):
+        """Получение данных паспорта для всех кафе"""
         try:
-            success = self.preset_manager.delete_adjustment(adjustment_id)
-            if success:
-                return jsonify({'status': 'success'})
-            else:
-                return jsonify({'error': 'Корректировка не найдена'}), 404
+            # Загружаем данные паспорта
+            passport_df = self.data_loader.load_passport_data()
+            
+            # Получаем факты для вычисления динамических показателей
+            facts_df = self.data_loader.facts_df
+            
+            passport_data = []
+            
+            for _, row in passport_df.iterrows():
+                cafe_name = row['cafe']
+                cafe_facts = facts_df[facts_df['Кафе'] == cafe_name]
+                
+                # Вычисляем дни работы
+                if not cafe_facts.empty:
+                    open_date = pd.to_datetime(row['open_date'])
+                    today = datetime.now()
+                    days_working = (today - open_date).days
+                    
+                    # Средние показатели за последние 30 дней
+                    last_30_days = cafe_facts[cafe_facts['Дата'] >= (today - timedelta(days=30))]
+                    avg_traffic = last_30_days['Трафик'].mean() if not last_30_days.empty else 0
+                    avg_revenue = last_30_days['Выручка'].mean() if not last_30_days.empty else 0
+                    
+                    # Чеки на сотрудника и ТО на сотрудника
+                    checks_per_staff = avg_traffic / row['staff_count'] if row['staff_count'] > 0 else 0
+                    revenue_per_staff = avg_revenue / row['staff_count'] if row['staff_count'] > 0 else 0
+                    
+                else:
+                    days_working = 0
+                    checks_per_staff = 0
+                    revenue_per_staff = 0
+                
+                passport_item = {
+                    'cafe': cafe_name,
+                    'open_date': row['open_date'],
+                    'days_working': days_working,
+                    'seats': row['seats'],
+                    'location_type': row['location_type'],
+                    'staff_count': row['staff_count'],
+                    'area_sqm': row['area_sqm'],
+                    'parking': row['parking'],
+                    'delivery': row['delivery'],
+                    'checks_per_staff': round(checks_per_staff, 1),
+                    'revenue_per_staff': round(revenue_per_staff, 0),
+                    'kitchen_type': row.get('kitchen_type', 'Не указано'),
+                    'work_hours': row.get('work_hours', 'Не указано')
+                }
+                
+                passport_data.append(passport_item)
+            
+            return jsonify({'passport_data': passport_data})
+            
         except Exception as e:
-            logger.error(f"Ошибка при удалении корректировки: {e}")
+            logger.error(f"Ошибка при получении данных паспорта: {e}")
             return jsonify({'error': str(e)}), 500

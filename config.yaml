@@ -1,0 +1,104 @@
+# Конфигурация приложения прогнозирования выручки "Пироговый Дворик"
+
+# Пути к данным
+data:
+  facts_file: "facts.xlsx"
+  holidays_file: "holidays_df.xlsx"
+  prophet_holidays_file: "prophet_holidays_2020_2027.csv"
+  russian_calendar_file: "russian_calendar_2020_2027.csv"
+
+# Параметры сервера
+server:
+  host: "0.0.0.0"
+  port: 5000
+  debug: true
+  threads: 4
+
+# Параметры по умолчанию для прогнозирования
+forecast_defaults:
+  horizon: 365
+  confidence_interval: 0.95
+  train_split: 0.8
+  auto_tune: false
+  
+  # Параметры для обнаружения выбросов
+  outliers:
+    remove: true
+    multiplier: 1.5
+  
+  # Параметры Prophet по умолчанию
+  prophet:
+    changepoint_prior_scale: 0.05
+    seasonality_prior_scale: 10.0
+    holidays_prior_scale: 10.0
+    yearly_seasonality: true
+    weekly_seasonality: true
+    daily_seasonality: false
+  
+  # Параметры ARIMA по умолчанию
+  arima:
+    p: 2
+    d: 1
+    q: 2
+  
+  # Параметры XGBoost по умолчанию
+  xgboost:
+    n_estimators: 100
+    max_depth: 5
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+  
+  # Параметры LSTM по умолчанию
+  lstm:
+    lookback: 30
+    hidden_size: 50
+    num_layers: 2
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 50
+
+# База данных для пресетов и корректировок
+database:
+  path: "forecasting_db.sqlite"
+  
+# Параметры кэширования
+cache:
+  enable: true
+  ttl: 3600  # время жизни кэша в секундах
+
+# Параметры логирования
+logging:
+  level: "INFO"
+  file: "forecasting.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Исключаемые кафе
+excluded_cafes:
+  - "ПД-15"
+  - "ПД-20"
+  - "ПД-25"
+  - "Кейтеринг"
+
+# Пороги для метрик качества (для рекомендаций)
+metrics_thresholds:
+  mape:
+    excellent: 5
+    good: 10
+    warning: 20
+    poor: 30
+  rmse:
+    traffic: 100
+    check: 50
+    revenue: 10000
+
+# Параметры автоматической настройки
+auto_tuning:
+  n_trials_full: 50
+  n_trials_quick: 20
+  timeout: 300  # максимальное время в секундах
+  
+# API настройки (если потребуется в будущем)
+api:
+  key: ""
+  endpoint: ""

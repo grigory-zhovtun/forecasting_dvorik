@@ -11,10 +11,9 @@ from pathlib import Path
 import os
 
 # Импорт модулей приложения
-from data_loader import DataLoader
-from forecast_engine import ForecastEngine
-from presets import PresetManager
-from views import ForecastViews
+from src.models.data_loader import DataLoader
+from src.models.forecast_engine import ForecastEngine
+from src.controllers.views import ForecastViews
 
 warnings.filterwarnings('ignore')
 logging.basicConfig(
@@ -43,8 +42,7 @@ def load_config(config_path='config.yaml'):
 config = load_config()
 data_loader = DataLoader(config)
 forecast_engine = ForecastEngine(config, data_loader)
-preset_manager = PresetManager(config)
-views = ForecastViews(app, config, data_loader, forecast_engine, preset_manager)
+views = ForecastViews(app, config, data_loader, forecast_engine)
 
 if __name__ == '__main__':
     # Создание необходимых директорий

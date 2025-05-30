@@ -195,6 +195,13 @@
             margin: 2rem 0;
         }
 
+        .adjustment-panel {
+            background: var(--light-bg);
+            padding: 1.5rem;
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+        }
+
         .adjustment-item {
             background: #f8f9fa;
             padding: 1rem;
@@ -463,26 +470,6 @@
                         </div>
                     </div>
 
-                    <div class="mt-4">
-                        <h5 class="mb-3">
-                            <i class="bi bi-save"></i> Пресеты
-                        </h5>
-                        <div class="row mb-3">
-                            <div class="col-md-8">
-                                <select class="form-select" id="presetSelect">
-                                    <option value="">Выберите пресет...</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <button class="btn btn-sm btn-outline-primary" id="loadPreset">
-                                    <i class="bi bi-download"></i> Загрузить
-                                </button>
-                            </div>
-                        </div>
-                        <button class="btn btn-sm btn-outline-success" id="savePreset">
-                            <i class="bi bi-save"></i> Сохранить как...
-                        </button>
-                    </div>
 
                     <div class="mt-4">
                         <h5 class="mb-3">
@@ -567,9 +554,36 @@
                         <p class="mt-2">Построение графика...</p>
                     </div>
 
-                    <div id="summaryTableContainer" class="mt-4">
-                        <h4 class="mb-3 section-title"><i class="bi bi-card-list"></i> Сводка по прогнозу</h4>
-                        <div class="table-responsive">
+                    <!-- Навигационные табы -->
+                    <ul class="nav nav-tabs mt-4" id="resultTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" type="button" role="tab">
+                                <i class="bi bi-card-list"></i> Сводка
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="metrics-tab" data-bs-toggle="tab" data-bs-target="#metrics" type="button" role="tab">
+                                <i class="bi bi-bar-chart-line"></i> Метрики
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="adjustments-tab" data-bs-toggle="tab" data-bs-target="#adjustments" type="button" role="tab">
+                                <i class="bi bi-sliders"></i> Корректировки
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="passport-tab" data-bs-toggle="tab" data-bs-target="#passport" type="button" role="tab">
+                                <i class="bi bi-building"></i> Паспорт
+                            </button>
+                        </li>
+                    </ul>
+
+                    <!-- Содержимое табов -->
+                    <div class="tab-content" id="resultTabsContent">
+                        <!-- Таб Сводка -->
+                        <div class="tab-pane fade show active" id="summary" role="tabpanel" aria-labelledby="summary-tab">
+                            <div id="summaryTableContainer" class="mt-4">
+                                <div class="table-responsive">
                             <table class="table table-bordered table-striped" id="cafeSummaryTable">
                                 <thead class="table-light">
                                     <tr>
@@ -613,11 +627,14 @@
                                         <td id="totalAvgCheckDeviation" class="deviation-group">---</td>
                                     </tr>
                                 </tfoot>
-                            </table>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div id="metricsContainer" class="mt-4 d-none">
+                        <!-- Таб Метрики -->
+                        <div class="tab-pane fade" id="metrics" role="tabpanel" aria-labelledby="metrics-tab">
+                            <div id="metricsContainer" class="mt-4">
                         <h4 class="mb-3 section-title"><i class="bi bi-bar-chart-line"></i> Метрики качества прогноза</h4>
                         <div class="table-responsive">
                             <table class="table table-bordered table-hover table-sm">
@@ -635,38 +652,102 @@
                                 <tbody id="metricsTable">
                                 </tbody>
                             </table>
+                                </div>
+                                <small class="text-muted">MAPE (Mean Absolute Percentage Error) - средняя абсолютная процентная ошибка. RMSE (Root Mean Square Error) - корень из среднеквадратичной ошибки.</small>
+                            </div>
                         </div>
-                        <small class="text-muted">MAPE (Mean Absolute Percentage Error) - средняя абсолютная процентная ошибка. RMSE (Root Mean Square Error) - корень из среднеквадратичной ошибки.</small>
+
+                        <!-- Таб Корректировки -->
+                        <div class="tab-pane fade" id="adjustments" role="tabpanel" aria-labelledby="adjustments-tab">
+                            <div id="adjustmentControlPanel" class="mt-4">
+                        <h4 class="mb-3 section-title"><i class="bi bi-sliders"></i> Корректировка прогноза</h4>
+                        <div class="adjustment-panel">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Кафе</label>
+                                    <select class="form-select" id="adjustmentCafe">
+                                        <option value="ALL">Все кафе</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Показатель</label>
+                                    <select class="form-select" id="adjustmentMetric">
+                                        <option value="revenue">Выручка</option>
+                                        <option value="traffic">Трафик</option>
+                                        <option value="avg_check">Средний чек</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Тип корректировки</label>
+                                    <select class="form-select" id="adjustmentType">
+                                        <option value="percent">Процент (%)</option>
+                                        <option value="absolute">Абсолютное значение</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Значение</label>
+                                    <input type="number" class="form-control" id="adjustmentValue" 
+                                           placeholder="Например: 10" step="0.1">
+                                </div>
+                            </div>
+                            <div class="row g-3 mt-2">
+                                <div class="col-md-4">
+                                    <label class="form-label">Дата начала</label>
+                                    <input type="date" class="form-control" id="adjustmentDateFrom">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Дата окончания</label>
+                                    <input type="date" class="form-control" id="adjustmentDateTo">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">&nbsp;</label>
+                                    <div>
+                                        <button class="btn btn-primary" id="applyAdjustment">
+                                            <i class="bi bi-check-circle"></i> Применить
+                                        </button>
+                                        <button class="btn btn-secondary ms-2" id="resetAdjustments">
+                                            <i class="bi bi-arrow-counterclockwise"></i> Сбросить
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-3" id="adjustmentHistory" style="display:none;">
+                                <h6>История корректировок:</h6>
+                                <ul class="list-group" id="adjustmentList"></ul>
+                            </div>
+                        </div>
+                    </div>
+                        </div>
+
+                        <!-- Таб Паспорт -->
+                        <div class="tab-pane fade" id="passport" role="tabpanel" aria-labelledby="passport-tab">
+                            <div id="passportContainer" class="mt-4">
+                                <h4 class="mb-3 section-title"><i class="bi bi-building"></i> Паспорт кафе</h4>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-hover" id="passportTable">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Кафе</th>
+                                                <th>Дата открытия</th>
+                                                <th>Дней работает</th>
+                                                <th>Посадочных мест</th>
+                                                <th>Расположение</th>
+                                                <th>Штат</th>
+                                                <th>Площадь, м²</th>
+                                                <th>Парковка</th>
+                                                <th>Доставка</th>
+                                                <th>Чеков/сотрудник</th>
+                                                <th>ТО/сотрудник</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="passportTableBody">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно для сохранения пресета -->
-    <div class="modal fade" id="savePresetModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Сохранить пресет</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Название пресета</label>
-                        <input type="text" class="form-control" id="presetName" 
-                               placeholder="Например: Прогноз на новый год">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Описание (опционально)</label>
-                        <textarea class="form-control" id="presetDescription" rows="3"
-                                  placeholder="Опишите особенности этого пресета"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" class="btn btn-primary" id="confirmSavePreset">Сохранить</button>
                 </div>
             </div>
         </div>
@@ -769,12 +850,136 @@
             console.log('Инициализация приложения...');
             loadInitialData();
             setupEventHandlers();
+            loadPassportData();
             // Инициализация тултипов Bootstrap
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
             var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl)
             })
         });
+
+        // Загрузка данных паспорта
+        function loadPassportData() {
+            $.get('/api/passport_data', function(response) {
+                if (response.passport_data && response.passport_data.length > 0) {
+                    const tbody = $('#passportTableBody');
+                    tbody.empty();
+                    
+                    response.passport_data.forEach(cafe => {
+                        const row = $(`
+                            <tr>
+                                <td><strong>${cafe.cafe}</strong></td>
+                                <td>${new Date(cafe.open_date).toLocaleDateString('ru-RU')}</td>
+                                <td>${cafe.days_working}</td>
+                                <td>${cafe.seats}</td>
+                                <td>${cafe.location_type}</td>
+                                <td>${cafe.staff_count}</td>
+                                <td>${cafe.area_sqm}</td>
+                                <td>${cafe.parking}</td>
+                                <td>${cafe.delivery}</td>
+                                <td>${cafe.checks_per_staff}</td>
+                                <td>${cafe.revenue_per_staff.toLocaleString('ru-RU')} ₽</td>
+                            </tr>
+                        `);
+                        tbody.append(row);
+                    });
+                }
+            }).fail(function(error) {
+                console.error('Ошибка загрузки данных паспорта:', error);
+            });
+        }
+
+        // Обновление списка кафе в панели корректировок
+        function updateAdjustmentCafeList() {
+            const select = $('#adjustmentCafe');
+            select.empty();
+            select.append('<option value="ALL">Все кафе</option>');
+            cafes.forEach(cafe => {
+                select.append(`<option value="${cafe}">${cafe}</option>`);
+            });
+        }
+
+        // Применение корректировки к данным
+        function applyAdjustmentToData(cafe, metric, type, value, dateFrom, dateTo) {
+            // Сохраняем корректировку в историю
+            const adjustment = {
+                cafe: cafe,
+                metric: metric,
+                type: type,
+                value: value,
+                dateFrom: dateFrom,
+                dateTo: dateTo,
+                timestamp: new Date().toISOString()
+            };
+
+            // Добавляем в список
+            let adjustmentList = $('#adjustmentList');
+            const listItem = $(`
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <strong>${cafe === 'ALL' ? 'Все кафе' : cafe}</strong> - ${metric}
+                            <br>
+                            <small>${type === 'percent' ? value + '%' : value} | ${dateFrom} - ${dateTo}</small>
+                        </div>
+                        <button class="btn btn-sm btn-danger remove-adjustment">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                </li>
+            `);
+            adjustmentList.append(listItem);
+            $('#adjustmentHistory').show();
+
+            // Обновляем график с новыми корректировками
+            updateChartWithAdjustments();
+        }
+
+        // Обновление графика с корректировками
+        function updateChartWithAdjustments() {
+            if (!forecastData || !forecastData.data) return;
+
+            // Получаем все корректировки из списка
+            const adjustments = [];
+            $('#adjustmentList li').each(function() {
+                const text = $(this).find('strong').text();
+                const details = $(this).find('small').text();
+                // Парсим данные из элемента списка
+                adjustments.push({
+                    cafe: text.includes('Все кафе') ? 'ALL' : text.split(' - ')[0],
+                    // Добавьте парсинг остальных данных если нужно
+                });
+            });
+
+            // Отправляем запрос на обновление данных с корректировками
+            const params = {
+                adjustments: adjustments
+            };
+
+            $.ajax({
+                url: '/api/apply_adjustments',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(params),
+                success: function(response) {
+                    if (response.data && response.data.length > 0) {
+                        const config = {
+                            responsive: true,
+                            displayModeBar: true,
+                            modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                            displaylogo: false
+                        };
+                        Plotly.newPlot('plotlyChart', response.data, response.layout, config);
+                        if (response.summary_data) {
+                            renderSummaryTable(response.summary_data);
+                        }
+                    }
+                },
+                error: function(xhr) {
+                    alert('Ошибка применения корректировок');
+                }
+            });
+        }
 
         // Функция для определения цветового класса на основе MAPE
         function getMapeColorClass(mapeValue) {
@@ -832,28 +1037,12 @@
                     $('#dailySeasonality').prop('checked', data.default_params.daily_seasonality);
                 }
                 
-                // Загружаем список пресетов
-                loadPresets();
             }).fail(function(error) {
                 console.error('Ошибка загрузки данных:', error);
                 alert('Ошибка загрузки данных. Проверьте подключение к серверу.');
             });
         }
         
-        // Функция загрузки пресетов
-        function loadPresets() {
-            $.get('/api/presets/list', function(data) {
-                const select = $('#presetSelect');
-                select.empty();
-                select.append('<option value="">Выберите пресет...</option>');
-                
-                if (data.presets && data.presets.length > 0) {
-                    data.presets.forEach(preset => {
-                        select.append(`<option value="${preset.id}">${preset.name}</option>`);
-                    });
-                }
-            });
-        }
 
         // Отрисовка списка кафе
         function renderCafeList() {
@@ -910,97 +1099,6 @@
 
         // Настройка обработчиков событий
         function setupEventHandlers() {
-            // Обработчики для пресетов
-            $('#savePreset').click(function() {
-                $('#savePresetModal').modal('show');
-            });
-            
-            $('#confirmSavePreset').click(function() {
-                const presetName = $('#presetName').val();
-                if (!presetName) {
-                    alert('Введите название пресета');
-                    return;
-                }
-                
-                const selectedCafes = $('.cafe-select:checked').map(function() {
-                    return $(this).val();
-                }).get();
-                
-                const params = {
-                    forecast_horizon: parseInt($('#forecastHorizon').val()),
-                    remove_outliers: $('#removeOutliers').is(':checked'),
-                    outlier_multiplier: parseFloat($('#outlierMultiplier').val()),
-                    confidence_interval: parseFloat($('#confInterval').val()) / 100,
-                    model_type: $('#modelType').val(),
-                    auto_tune: $('#autoTune').is(':checked'),
-                    train_split: parseFloat($('#trainSplit').val()) / 100,
-                    changepoint_prior_scale: parseFloat($('#changepointPriorScale').val()),
-                    seasonality_prior_scale: parseFloat($('#seasonalityPriorScale').val()),
-                    yearly_seasonality: $('#yearlySeasonality').is(':checked'),
-                    weekly_seasonality: $('#weeklySeasonality').is(':checked'),
-                    daily_seasonality: $('#dailySeasonality').is(':checked')
-                };
-                
-                $.ajax({
-                    url: '/api/presets/save',
-                    method: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({
-                        name: presetName,
-                        cafes: selectedCafes,
-                        params: params,
-                        adjustments: adjustments
-                    }),
-                    success: function() {
-                        $('#savePresetModal').modal('hide');
-                        $('#presetName').val('');
-                        loadPresets();
-                        alert('Пресет сохранен');
-                    },
-                    error: function() {
-                        alert('Ошибка сохранения пресета');
-                    }
-                });
-            });
-            
-            $('#loadPreset').click(function() {
-                const presetId = $('#presetSelect').val();
-                if (!presetId) {
-                    alert('Выберите пресет');
-                    return;
-                }
-                
-                $.get(`/api/presets/load/${presetId}`, function(data) {
-                    if (data.preset) {
-                        // Загружаем выбранные кафе
-                        $('.cafe-select').prop('checked', false);
-                        data.preset.cafes.forEach(cafe => {
-                            $(`.cafe-select[value="${cafe}"]`).prop('checked', true);
-                        });
-                        
-                        // Загружаем параметры
-                        const params = data.preset.params;
-                        $('#forecastHorizon').val(params.forecast_horizon).trigger('input');
-                        $('#removeOutliers').prop('checked', params.remove_outliers).trigger('change');
-                        $('#outlierMultiplier').val(params.outlier_multiplier).trigger('input');
-                        $('#confInterval').val(params.confidence_interval * 100).trigger('input');
-                        $('#modelType').val(params.model_type).trigger('change');
-                        $('#autoTune').prop('checked', params.auto_tune);
-                        $('#trainSplit').val(params.train_split * 100).trigger('input');
-                        $('#changepointPriorScale').val(params.changepoint_prior_scale).trigger('input');
-                        $('#seasonalityPriorScale').val(params.seasonality_prior_scale).trigger('input');
-                        $('#yearlySeasonality').prop('checked', params.yearly_seasonality);
-                        $('#weeklySeasonality').prop('checked', params.weekly_seasonality);
-                        $('#dailySeasonality').prop('checked', params.daily_seasonality);
-                        
-                        // Загружаем корректировки
-                        adjustments = data.preset.adjustments || [];
-                        renderAdjustments();
-                        
-                        alert('Пресет загружен');
-                    }
-                });
-            });
             
             // Обработчик для менеджера корректировок
             $('#viewAdjustments').click(function() {
@@ -1098,6 +1196,35 @@
             // Экспорт в Excel
             $('#exportExcel').click(function() {
                 window.location.href = '/api/export_excel';
+            });
+
+            // Обработчики для панели корректировок
+            $('#applyAdjustment').click(function() {
+                const cafe = $('#adjustmentCafe').val();
+                const metric = $('#adjustmentMetric').val();
+                const type = $('#adjustmentType').val();
+                const value = parseFloat($('#adjustmentValue').val());
+                const dateFrom = $('#adjustmentDateFrom').val();
+                const dateTo = $('#adjustmentDateTo').val();
+
+                if (!value || !dateFrom || !dateTo) {
+                    alert('Заполните все поля');
+                    return;
+                }
+
+                // Применяем корректировку к данным
+                applyAdjustmentToData(cafe, metric, type, value, dateFrom, dateTo);
+            });
+
+            $('#resetAdjustments').click(function() {
+                if (confirm('Сбросить все корректировки?')) {
+                    $('#adjustmentHistory').hide();
+                    $('#adjustmentList').empty();
+                    // Перезагружаем исходные данные
+                    if (forecastData) {
+                        updateChart();
+                    }
+                }
             });
         }
 
@@ -1291,6 +1418,11 @@
                     } else {
                         renderSummaryTable(null); // Clear table or show default
                     }
+                    
+                    // Табы уже видны, панель корректировок показывается через табы
+                    
+                    // Сохраняем данные для корректировок
+                    forecastData = response;
                 } else {
                     $('#chartContainer').html(`
                         <div class="empty-state">
@@ -1484,9 +1616,9 @@
                             
                             metricsTable.append(rowCheck);
                         });
-                        $("#metricsContainer").removeClass("d-none");
+                        // Метрики уже видны через табы
                     } else {
-                        $("#metricsContainer").addClass("d-none");
+                        // Метрики скрыты через табы
                     }
 
                 } else {
