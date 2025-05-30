@@ -195,25 +195,6 @@
             margin: 2rem 0;
         }
 
-        .adjustment-panel {
-            background: var(--light-bg);
-            padding: 1.5rem;
-            border-radius: 10px;
-            border: 1px solid #e0e0e0;
-        }
-
-        .adjustment-item {
-            background: #f8f9fa;
-            padding: 1rem;
-            border-radius: 10px;
-            margin-bottom: 1rem;
-            border: 2px solid transparent;
-            transition: all 0.3s ease;
-        }
-
-        .adjustment-item:hover {
-            border-color: var(--secondary-color);
-        }
 
         .badge-metric {
             font-size: 0.85rem;
@@ -475,14 +456,6 @@
                         <h5 class="mb-3">
                             <i class="bi bi-sliders2-vertical"></i> Корректировки
                         </h5>
-                        <button class="btn btn-sm btn-outline-primary mb-3" id="addAdjustment" data-bs-toggle="tooltip" title="Позволяет вручную скорректировать прогноз для известных предстоящих событий (например, промо-акций, праздников, не входящих в стандартный список).">
-                            <i class="bi bi-plus-circle"></i> Добавить корректировку
-                        </button>
-                        <button class="btn btn-sm btn-outline-info mb-3 ms-2" id="viewAdjustments">
-                            <i class="bi bi-calendar3"></i> Менеджер корректировок
-                        </button>
-                        <div id="adjustmentsList">
-                            </div>
                     </div>
 
                     <div class="mt-4 text-center">
@@ -567,8 +540,8 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="adjustments-tab" data-bs-toggle="tab" data-bs-target="#adjustments" type="button" role="tab">
-                                <i class="bi bi-sliders"></i> Корректировки
+                            <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
+                                <i class="bi bi-gear"></i> Настройка
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
@@ -657,66 +630,51 @@
                             </div>
                         </div>
 
-                        <!-- Таб Корректировки -->
-                        <div class="tab-pane fade" id="adjustments" role="tabpanel" aria-labelledby="adjustments-tab">
-                            <div id="adjustmentControlPanel" class="mt-4">
-                        <h4 class="mb-3 section-title"><i class="bi bi-sliders"></i> Корректировка прогноза</h4>
-                        <div class="adjustment-panel">
-                            <div class="row g-3">
-                                <div class="col-md-3">
-                                    <label class="form-label">Кафе</label>
-                                    <select class="form-select" id="adjustmentCafe">
-                                        <option value="ALL">Все кафе</option>
-                                    </select>
+                        <!-- Таб Настройка -->
+                        <div class="tab-pane fade" id="settings" role="tabpanel" aria-labelledby="settings-tab">
+                            <div id="settingsContainer" class="mt-4">
+                                <h4 class="mb-3 section-title"><i class="bi bi-gear"></i> Настройка параметров прогноза по кафе</h4>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-hover" id="settingsTable">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th rowspan="2" style="vertical-align: middle;">Кафе</th>
+                                                <th colspan="3" class="text-center">Сезонность</th>
+                                                <th colspan="2" class="text-center">Чувствительность модели</th>
+                                                <th rowspan="2" style="vertical-align: middle;">Учитывать праздники</th>
+                                                <th rowspan="2" style="vertical-align: middle;">Удалять выбросы</th>
+                                            </tr>
+                                            <tr>
+                                                <th>Годовая</th>
+                                                <th>Недельная</th>
+                                                <th>Дневная</th>
+                                                <th>К тренду</th>
+                                                <th>К сезонности</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="settingsTableBody">
+                                        </tbody>
+                                    </table>
                                 </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Показатель</label>
-                                    <select class="form-select" id="adjustmentMetric">
-                                        <option value="revenue">Выручка</option>
-                                        <option value="traffic">Трафик</option>
-                                        <option value="avg_check">Средний чек</option>
-                                    </select>
+                                <div class="mt-3">
+                                    <button class="btn btn-primary" id="applySettings">
+                                        <i class="bi bi-check-circle"></i> Применить настройки
+                                    </button>
+                                    <button class="btn btn-secondary ms-2" id="resetSettings">
+                                        <i class="bi bi-arrow-counterclockwise"></i> Сбросить на стандартные
+                                    </button>
                                 </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Тип корректировки</label>
-                                    <select class="form-select" id="adjustmentType">
-                                        <option value="percent">Процент (%)</option>
-                                        <option value="absolute">Абсолютное значение</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Значение</label>
-                                    <input type="number" class="form-control" id="adjustmentValue" 
-                                           placeholder="Например: 10" step="0.1">
-                                </div>
-                            </div>
-                            <div class="row g-3 mt-2">
-                                <div class="col-md-4">
-                                    <label class="form-label">Дата начала</label>
-                                    <input type="date" class="form-control" id="adjustmentDateFrom">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Дата окончания</label>
-                                    <input type="date" class="form-control" id="adjustmentDateTo">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">&nbsp;</label>
-                                    <div>
-                                        <button class="btn btn-primary" id="applyAdjustment">
-                                            <i class="bi bi-check-circle"></i> Применить
-                                        </button>
-                                        <button class="btn btn-secondary ms-2" id="resetAdjustments">
-                                            <i class="bi bi-arrow-counterclockwise"></i> Сбросить
-                                        </button>
-                                    </div>
+                                <div class="mt-4 p-3 bg-light rounded">
+                                    <h5>Подсказки по настройкам:</h5>
+                                    <ul class="mb-0">
+                                        <li><strong>Сезонность:</strong> Включите те типы сезонности, которые характерны для конкретного кафе</li>
+                                        <li><strong>Чувствительность к тренду (0.001-0.5):</strong> Чем выше значение, тем быстрее модель реагирует на изменения тренда</li>
+                                        <li><strong>Чувствительность к сезонности (0.1-25):</strong> Определяет силу сезонных колебаний</li>
+                                        <li><strong>Учитывать праздники:</strong> Включите для кафе в торговых центрах и местах с высоким трафиком</li>
+                                        <li><strong>Удалять выбросы:</strong> Рекомендуется для стабильной работы, отключите для новых кафе</li>
+                                    </ul>
                                 </div>
                             </div>
-                            <div class="mt-3" id="adjustmentHistory" style="display:none;">
-                                <h6>История корректировок:</h6>
-                                <ul class="list-group" id="adjustmentList"></ul>
-                            </div>
-                        </div>
-                    </div>
                         </div>
 
                         <!-- Таб Паспорт -->
@@ -753,95 +711,12 @@
         </div>
     </div>
 
-    <!-- Модальное окно менеджера корректировок -->
-    <div class="modal fade" id="adjustmentManagerModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Менеджер корректировок</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Кафе</th>
-                                    <th>Период</th>
-                                    <th>Метрика</th>
-                                    <th>Коэффициент</th>
-                                    <th>Причина</th>
-                                    <th>Действия</th>
-                                </tr>
-                            </thead>
-                            <tbody id="adjustmentManagerTable">
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="adjustmentModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Добавить корректировку</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Кафе</label>
-                        <select class="form-select" id="adjCafe">
-                            <option value="ALL">Все кафе</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Дата начала</label>
-                        <input type="date" class="form-control" id="adjDateFrom">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Дата окончания</label>
-                        <input type="date" class="form-control" id="adjDateTo">
-                    </div>
-                    <div class="mb-3 prophet-setting">
-                        <label class="form-label">Метрика</label>
-                        <select class="form-select" id="adjMetric">
-                            <option value="both">Выручка</option>
-                            <option value="traffic">Только трафик</option>
-                            <option value="check">Только средний чек</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Коэффициент изменения</label>
-                        <input type="number" class="form-control" id="adjCoefficient"
-                               min="0.1" max="3" step="0.05" value="1.0">
-                        <small class="text-muted">1.0 = без изменений, 1.1 = рост на 10%</small>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Причина</label>
-                        <input type="text" class="form-control" id="adjReason"
-                               placeholder="Например: Промо-акция">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" class="btn btn-primary" id="saveAdjustment">Сохранить</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         // Глобальные переменные
         let cafes = [];
-        let adjustments = [];
         let forecastData = null;
         let cancelRequested = false;
 
@@ -889,104 +764,84 @@
             });
         }
 
-        // Обновление списка кафе в панели корректировок
-        function updateAdjustmentCafeList() {
-            const select = $('#adjustmentCafe');
-            select.empty();
-            select.append('<option value="ALL">Все кафе</option>');
+        // Загрузка настроек по кафе
+        function loadCafeSettings() {
+            const tbody = $('#settingsTableBody');
+            tbody.empty();
+            
+            // Дефолтные настройки
+            const defaultSettings = {
+                yearly_seasonality: true,
+                weekly_seasonality: true,
+                daily_seasonality: false,
+                changepoint_prior_scale: 0.05,
+                seasonality_prior_scale: 10.0,
+                holidays_enabled: true,
+                remove_outliers: true
+            };
+            
             cafes.forEach(cafe => {
-                select.append(`<option value="${cafe}">${cafe}</option>`);
+                const row = $(`
+                    <tr data-cafe="${cafe}">
+                        <td><strong>${cafe}</strong></td>
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input yearly-season" ${defaultSettings.yearly_seasonality ? 'checked' : ''}>
+                        </td>
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input weekly-season" ${defaultSettings.weekly_seasonality ? 'checked' : ''}>
+                        </td>
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input daily-season" ${defaultSettings.daily_seasonality ? 'checked' : ''}>
+                        </td>
+                        <td>
+                            <input type="number" class="form-control form-control-sm trend-scale" 
+                                   value="${defaultSettings.changepoint_prior_scale}" 
+                                   min="0.001" max="0.5" step="0.001"
+                                   data-bs-toggle="tooltip" title="Рекомендуется: 0.05 для стабильных кафе, 0.1-0.2 для новых">
+                        </td>
+                        <td>
+                            <input type="number" class="form-control form-control-sm seasonality-scale" 
+                                   value="${defaultSettings.seasonality_prior_scale}" 
+                                   min="0.1" max="25" step="0.1"
+                                   data-bs-toggle="tooltip" title="Рекомендуется: 10 для обычных кафе, 20 для кафе с высокой сезонностью">
+                        </td>
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input holidays-enabled" ${defaultSettings.holidays_enabled ? 'checked' : ''}>
+                        </td>
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input outliers-enabled" ${defaultSettings.remove_outliers ? 'checked' : ''}>
+                        </td>
+                    </tr>
+                `);
+                tbody.append(row);
             });
+            
+            // Инициализация тултипов
+            $('[data-bs-toggle="tooltip"]').tooltip();
         }
-
-        // Применение корректировки к данным
-        function applyAdjustmentToData(cafe, metric, type, value, dateFrom, dateTo) {
-            // Сохраняем корректировку в историю
-            const adjustment = {
-                cafe: cafe,
-                metric: metric,
-                type: type,
-                value: value,
-                dateFrom: dateFrom,
-                dateTo: dateTo,
-                timestamp: new Date().toISOString()
-            };
-
-            // Добавляем в список
-            let adjustmentList = $('#adjustmentList');
-            const listItem = $(`
-                <li class="list-group-item" 
-                    data-cafe="${cafe}" 
-                    data-metric="${metric}" 
-                    data-type="${type}" 
-                    data-value="${value}" 
-                    data-date-from="${dateFrom}" 
-                    data-date-to="${dateTo}">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <strong>${cafe === 'ALL' ? 'Все кафе' : cafe}</strong> - ${metric}
-                            <br>
-                            <small>${type === 'percent' ? value + '%' : value} | ${dateFrom} - ${dateTo}</small>
-                        </div>
-                        <button class="btn btn-sm btn-danger remove-adjustment">
-                            <i class="bi bi-x"></i>
-                        </button>
-                    </div>
-                </li>
-            `);
-            adjustmentList.append(listItem);
-            $('#adjustmentHistory').show();
-
-            // Обновляем график с новыми корректировками
-            updateChartWithAdjustments();
-        }
-
-        // Обновление графика с корректировками
-        function updateChartWithAdjustments() {
-            if (!forecastData || !forecastData.data) return;
-
-            // Получаем все корректировки из списка
-            const adjustments = [];
-            $('#adjustmentList li').each(function() {
-                const item = $(this);
-                adjustments.push({
-                    cafe: item.data('cafe'),
-                    metric: item.data('metric'),
-                    type: item.data('type'),
-                    value: parseFloat(item.data('value')),
-                    dateFrom: item.data('date-from'),
-                    dateTo: item.data('date-to')
-                });
+        
+        // Применение настроек
+        function applyCafeSettings() {
+            const settings = {};
+            
+            $('#settingsTableBody tr').each(function() {
+                const row = $(this);
+                const cafe = row.data('cafe');
+                
+                settings[cafe] = {
+                    yearly_seasonality: row.find('.yearly-season').is(':checked'),
+                    weekly_seasonality: row.find('.weekly-season').is(':checked'),
+                    daily_seasonality: row.find('.daily-season').is(':checked'),
+                    changepoint_prior_scale: parseFloat(row.find('.trend-scale').val()),
+                    seasonality_prior_scale: parseFloat(row.find('.seasonality-scale').val()),
+                    holidays_enabled: row.find('.holidays-enabled').is(':checked'),
+                    remove_outliers: row.find('.outliers-enabled').is(':checked')
+                };
             });
-
-            // Отправляем запрос на обновление данных с корректировками
-            const params = {
-                adjustments: adjustments
-            };
-
-            $.ajax({
-                url: '/api/apply_adjustments',
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify(params),
-                success: function(response) {
-                    if (response.data && response.data.length > 0) {
-                        const config = {
-                            responsive: true,
-                            displayModeBar: true,
-                            modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
-                            displaylogo: false
-                        };
-                        Plotly.newPlot('plotlyChart', response.data, response.layout, config);
-                        if (response.summary_data) {
-                            renderSummaryTable(response.summary_data);
-                        }
-                    }
-                },
-                error: function(xhr) {
-                    alert('Ошибка применения корректировок');
-                }
-            });
+            
+            // Сохраняем настройки в localStorage
+            localStorage.setItem('cafeSettings', JSON.stringify(settings));
+            alert('Настройки сохранены');
         }
 
         // Функция для определения цветового класса на основе MAPE
@@ -1011,7 +866,7 @@
                 console.log('Получены данные:', data);
                 cafes = data.cafes;
                 renderCafeList();
-                updateAdjustmentCafeList();
+                loadCafeSettings();
 
                 // Установка диапазона дат
                 if (data.date_range) {
@@ -1109,10 +964,6 @@
         function setupEventHandlers() {
             
             // Обработчик для менеджера корректировок
-            $('#viewAdjustments').click(function() {
-                loadAdjustmentManager();
-                $('#adjustmentManagerModal').modal('show');
-            });
             // Слайдеры
             $('#forecastHorizon').on('input', function() {
                 $('#horizonValue').text($(this).val());
@@ -1153,32 +1004,8 @@
             });
 
             // Добавление корректировки
-            $('#addAdjustment').click(function() {
-                $('#adjustmentModal').modal('show');
-            });
 
             // Сохранение корректировки
-            $('#saveAdjustment').click(function() {
-                const adjustment = {
-                    cafe: $('#adjCafe').val(),
-                    date_from: $('#adjDateFrom').val(),
-                    date_to: $('#adjDateTo').val(),
-                    metric: $('#adjMetric').val(),
-                    coefficient: parseFloat($('#adjCoefficient').val()),
-                    reason: $('#adjReason').val()
-                };
-
-                adjustments.push(adjustment);
-                renderAdjustments();
-                $('#adjustmentModal').modal('hide');
-
-                // Очистка формы
-                $('#adjCoefficient').val('1.0');
-                $('#adjReason').val('');
-                 // Сброс дат в модальном окне, если нужно
-                // $('#adjDateFrom').val('');
-                // $('#adjDateTo').val('');
-            });
 
             // Запуск прогнозирования
             $('#runForecast').click(runForecast);
@@ -1206,83 +1033,21 @@
                 window.location.href = '/api/export_excel';
             });
 
-            // Обработчики для панели корректировок
-            $('#applyAdjustment').click(function() {
-                const cafe = $('#adjustmentCafe').val();
-                const metric = $('#adjustmentMetric').val();
-                const type = $('#adjustmentType').val();
-                const value = parseFloat($('#adjustmentValue').val());
-                const dateFrom = $('#adjustmentDateFrom').val();
-                const dateTo = $('#adjustmentDateTo').val();
-
-                if (!value || !dateFrom || !dateTo) {
-                    alert('Заполните все поля');
-                    return;
-                }
-
-                // Применяем корректировку к данным
-                applyAdjustmentToData(cafe, metric, type, value, dateFrom, dateTo);
+            // Обработчики для панели настроек
+            $('#applySettings').click(function() {
+                applyCafeSettings();
             });
 
-            $('#resetAdjustments').click(function() {
-                if (confirm('Сбросить все корректировки?')) {
-                    $('#adjustmentHistory').hide();
-                    $('#adjustmentList').empty();
-                    // Перезагружаем исходные данные
-                    if (forecastData) {
-                        updateChart();
-                    }
+            $('#resetSettings').click(function() {
+                if (confirm('Сбросить настройки на стандартные?')) {
+                    localStorage.removeItem('cafeSettings');
+                    loadCafeSettings();
+                    alert('Настройки сброшены на стандартные');
                 }
-            });
-            
-            // Обработчик удаления корректировки
-            $(document).on('click', '.remove-adjustment', function() {
-                $(this).closest('li').remove();
-                if ($('#adjustmentList li').length === 0) {
-                    $('#adjustmentHistory').hide();
-                }
-                updateChartWithAdjustments();
             });
         }
 
         // Отрисовка корректировок
-        function renderAdjustments() {
-            const container = $('#adjustmentsList');
-            container.empty();
-
-            adjustments.forEach((adj, index) => {
-                const metricBadge = {
-                    'both': '<span class="badge bg-primary">Выручка</span>',
-                    'traffic': '<span class="badge bg-info">Трафик</span>',
-                    'check': '<span class="badge bg-warning">Чек</span>'
-                }[adj.metric];
-
-                const item = $(`
-                    <div class="adjustment-item">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <strong>${adj.cafe}</strong> ${metricBadge}<br>
-                                <small class="text-muted">
-                                    ${new Date(adj.date_from).toLocaleDateString()} -
-                                    ${new Date(adj.date_to).toLocaleDateString()}
-                                </small><br>
-                                <small>Коэффициент: ${adj.coefficient} | ${adj.reason}</small>
-                            </div>
-                            <button class="btn btn-sm btn-danger" onclick="removeAdjustment(${index})">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `);
-                container.append(item);
-            });
-        }
-
-        // Удаление корректировки
-        function removeAdjustment(index) {
-            adjustments.splice(index, 1);
-            renderAdjustments();
-        }
 
         // Запуск прогнозирования
         function runForecast() {
@@ -1313,7 +1078,6 @@
                 yearly_seasonality: $('#yearlySeasonality').is(':checked'),
                 weekly_seasonality: $('#weeklySeasonality').is(':checked'),
                 daily_seasonality: $('#dailySeasonality').is(':checked'),
-                adjustments: adjustments
             };
 
             // Add display date filters to params if they are set
@@ -1466,47 +1230,6 @@
         }
 
         // Функция загрузки менеджера корректировок
-        function loadAdjustmentManager() {
-            $.get('/api/adjustments/list', function(data) {
-                const table = $('#adjustmentManagerTable');
-                table.empty();
-                
-                if (data.adjustments && data.adjustments.length > 0) {
-                    data.adjustments.forEach(adj => {
-                        const row = $(`
-                            <tr>
-                                <td>${adj.cafe}</td>
-                                <td>${new Date(adj.date_from).toLocaleDateString()} - ${new Date(adj.date_to).toLocaleDateString()}</td>
-                                <td>${adj.metric}</td>
-                                <td>${adj.coefficient}</td>
-                                <td>${adj.reason || '-'}</td>
-                                <td>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteAdjustmentFromDB(${adj.id})">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        `);
-                        table.append(row);
-                    });
-                } else {
-                    table.append('<tr><td colspan="6" class="text-center">Нет сохраненных корректировок</td></tr>');
-                }
-            });
-        }
-        
-        // Функция удаления корректировки из БД
-        function deleteAdjustmentFromDB(id) {
-            if (confirm('Удалить корректировку?')) {
-                $.ajax({
-                    url: `/api/adjustments/delete/${id}`,
-                    method: 'DELETE',
-                    success: function() {
-                        loadAdjustmentManager();
-                    }
-                });
-            }
-        }
 
         // Обновление графика с фильтрами
         function updateChart() {

@@ -694,7 +694,7 @@ class ForecastViews:
                 return jsonify({'passport_data': []})
             
             # Получаем факты для вычисления динамических показателей
-            facts_df = self.data_loader.load_data()
+            facts_df = self.data_loader.load_facts_data()
             
             passport_data = []
             
