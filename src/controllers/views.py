@@ -148,6 +148,9 @@ class ForecastViews:
                 self.forecast_cache['latest'] = result
                 self.forecast_cache['params'] = params
                 self.metrics_cache.update(metrics)
+                # Сохраняем результаты для корректировок
+                session_id = 'default'  # Используем дефолтный session_id
+                self.app.forecast_results[session_id] = result
                 self.progress_queue.put({'status': 'complete'})
         
         self.current_task = threading.Thread(target=run_forecast)
@@ -270,30 +273,33 @@ class ForecastViews:
             })
             
             # Добавляем линию тренда для фактических данных
-            import numpy as np
-            from sklearn.linear_model import LinearRegression
-            
-            # Преобразуем даты в числовой формат для регрессии
-            x_numeric = np.arange(len(fact_data)).reshape(-1, 1)
-            y_values = fact_data['revenue_fact'].values
-            
-            # Обучаем модель линейной регрессии
-            lr = LinearRegression()
-            lr.fit(x_numeric, y_values)
-            trend_values = lr.predict(x_numeric)
-            
-            traces.append({
-                'x': fact_data['ds'].dt.strftime('%Y-%m-%d').tolist(),
-                'y': trend_values.round(2).tolist(),
-                'name': 'Тренд',
-                'type': 'scatter',
-                'mode': 'lines',
-                'line': {'width': 2, 'dash': 'dot', 'color': '#ff7f0e'},
-                'hovertemplate': '<b>%{fullData.name}</b><br>' +
-                               'Дата: %{x}<br>' +
-                               'Тренд: %{y:,.0f} ₽<br>' +
-                               '<extra></extra>'
-            })
+            try:
+                from sklearn.linear_model import LinearRegression
+                import numpy as np
+                
+                # Преобразуем даты в числовой формат для регрессии
+                x_numeric = np.arange(len(fact_data)).reshape(-1, 1)
+                y_values = fact_data['revenue_fact'].values
+                
+                # Обучаем модель линейной регрессии
+                lr = LinearRegression()
+                lr.fit(x_numeric, y_values)
+                trend_values = lr.predict(x_numeric)
+                
+                traces.append({
+                    'x': fact_data['ds'].dt.strftime('%Y-%m-%d').tolist(),
+                    'y': trend_values.round(2).tolist(),
+                    'name': 'Тренд',
+                    'type': 'scatter',
+                    'mode': 'lines',
+                    'line': {'width': 2, 'dash': 'dot', 'color': '#ff7f0e'},
+                    'hovertemplate': '<b>%{fullData.name}</b><br>' +
+                                   'Дата: %{x}<br>' +
+                                   'Тренд: %{y:,.0f} ₽<br>' +
+                                   '<extra></extra>'
+                })
+            except Exception as e:
+                logger.warning(f"Не удалось добавить линию тренда: {e}")
         
         # Прогноз (агрегированный)
         forecast_data = df_agg[df_agg['revenue_forecast'].notna()].sort_values('ds')
@@ -340,9 +346,13 @@ class ForecastViews:
             adjustments = data.get('adjustments', [])
             
             # Получаем текущие данные прогноза
-            session_id = request.cookies.get('session_id')
-            if not session_id or session_id not in self.app.forecast_results:
-                return jsonify({'error': 'Нет данных прогноза'}), 404
+            session_id = 'default'  # Используем дефолтный session_id
+            if session_id not in self.app.forecast_results:
+                # Пробуем получить из кэша
+                if 'latest' in self.forecast_cache:
+                    self.app.forecast_results[session_id] = self.forecast_cache['latest']
+                else:
+                    return jsonify({'error': 'Нет данных прогноза. Сначала выполните прогноз.'}), 404
             
             # Копируем исходные данные
             original_df = self.app.forecast_results[session_id].copy()
@@ -504,60 +514,6 @@ class ForecastViews:
             'font': {'family': 'Arial, sans-serif', 'size': 12}
         }
     
-    def _prepare_summary_data(self, df: pd.DataFrame) -> dict:
-        """Подготовка сводных данных для таблицы"""
-        summary_data = {
-            'cafes': {},
-            'total': {
-                'revenue': {'actual': 0, 'forecast': 0, 'total': 0},
-                'traffic': {'actual': 0, 'forecast': 0, 'total': 0}
-            }
-        }
-        
-        if df.empty:
-            return summary_data
-        
-        today = pd.to_datetime(datetime.now().date())
-        
-        for cafe in df['cafe'].unique():
-            cafe_df = df[df['cafe'] == cafe]
-            
-            # Актуальные данные
-            actual_df = cafe_df[cafe_df['ds'] <= today]
-            revenue_actual = actual_df['revenue_fact'].fillna(0).sum()
-            traffic_actual = actual_df['traffic_fact'].fillna(0).sum()
-            
-            # Прогнозные данные
-            forecast_df = cafe_df[cafe_df['ds'] > today]
-            revenue_forecast = forecast_df['revenue_forecast'].fillna(0).sum()
-            traffic_forecast = forecast_df['traffic_forecast'].fillna(0).sum()
-            
-            # Общие данные
-            revenue_total = revenue_actual + revenue_forecast
-            traffic_total = traffic_actual + traffic_forecast
-            
-            summary_data['cafes'][cafe] = {
-                'revenue': {
-                    'actual': revenue_actual,
-                    'forecast': revenue_forecast,
-                    'total': revenue_total
-                },
-                'traffic': {
-                    'actual': traffic_actual,
-                    'forecast': traffic_forecast,
-                    'total': traffic_total
-                }
-            }
-            
-            # Добавляем к общим итогам
-            summary_data['total']['revenue']['actual'] += revenue_actual
-            summary_data['total']['revenue']['forecast'] += revenue_forecast
-            summary_data['total']['revenue']['total'] += revenue_total
-            summary_data['total']['traffic']['actual'] += traffic_actual
-            summary_data['total']['traffic']['forecast'] += traffic_forecast
-            summary_data['total']['traffic']['total'] += traffic_total
-        
-        return summary_data
     
     def export_excel(self):
         """Экспорт результатов в Excel"""
@@ -732,6 +688,10 @@ class ForecastViews:
         try:
             # Загружаем данные паспорта
             passport_df = self.data_loader.load_passport_data()
+            
+            if passport_df.empty:
+                logger.warning("Данные паспорта пустые")
+                return jsonify({'passport_data': []})
             
             # Получаем факты для вычисления динамических показателей
             facts_df = self.data_loader.load_data()

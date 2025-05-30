@@ -915,7 +915,13 @@
             // Добавляем в список
             let adjustmentList = $('#adjustmentList');
             const listItem = $(`
-                <li class="list-group-item">
+                <li class="list-group-item" 
+                    data-cafe="${cafe}" 
+                    data-metric="${metric}" 
+                    data-type="${type}" 
+                    data-value="${value}" 
+                    data-date-from="${dateFrom}" 
+                    data-date-to="${dateTo}">
                     <div class="d-flex justify-content-between">
                         <div>
                             <strong>${cafe === 'ALL' ? 'Все кафе' : cafe}</strong> - ${metric}
@@ -942,12 +948,14 @@
             // Получаем все корректировки из списка
             const adjustments = [];
             $('#adjustmentList li').each(function() {
-                const text = $(this).find('strong').text();
-                const details = $(this).find('small').text();
-                // Парсим данные из элемента списка
+                const item = $(this);
                 adjustments.push({
-                    cafe: text.includes('Все кафе') ? 'ALL' : text.split(' - ')[0],
-                    // Добавьте парсинг остальных данных если нужно
+                    cafe: item.data('cafe'),
+                    metric: item.data('metric'),
+                    type: item.data('type'),
+                    value: parseFloat(item.data('value')),
+                    dateFrom: item.data('date-from'),
+                    dateTo: item.data('date-to')
                 });
             });
 
@@ -1225,6 +1233,15 @@
                         updateChart();
                     }
                 }
+            });
+            
+            // Обработчик удаления корректировки
+            $(document).on('click', '.remove-adjustment', function() {
+                $(this).closest('li').remove();
+                if ($('#adjustmentList li').length === 0) {
+                    $('#adjustmentHistory').hide();
+                }
+                updateChartWithAdjustments();
             });
         }
 
