@@ -688,6 +688,11 @@ class ForecastViews:
         try:
             # Загружаем данные паспорта
             passport_df = self.data_loader.load_passport_data()
+
+            # Logging for passport_df
+            logger.info(f"Passport data received in views - shape: {passport_df.shape}")
+            logger.info(f"Passport data received in views - columns: {passport_df.columns.tolist()}")
+            logger.info(f"Passport data received in views - head:\n{passport_df.head().to_string()}")
             
             if passport_df.empty:
                 logger.warning("Данные паспорта пустые")
@@ -710,9 +715,23 @@ class ForecastViews:
                     
                     # Средние показатели за последние 30 дней
                     last_30_days = cafe_facts[cafe_facts['Дата'] >= (today - timedelta(days=30))]
-                    avg_traffic = last_30_days['Трафик'].mean() if not last_30_days.empty else 0
-                    avg_revenue = last_30_days['Выручка'].mean() if not last_30_days.empty else 0
                     
+                    avg_traffic = 0  # Initialize
+                    avg_revenue = 0  # Initialize
+                    
+                    if not last_30_days.empty:
+                        if 'Тр' in last_30_days.columns:
+                            avg_traffic = last_30_days['Тр'].mean()
+                        else:
+                            logger.warning(f"Column 'Тр' not found in last_30_days for cafe: {cafe_name}. Setting avg_traffic to 0.")
+                        
+                        if 'Выручка' in last_30_days.columns:
+                            avg_revenue = last_30_days['Выручка'].mean()
+                        else:
+                            logger.warning(f"Column 'Выручка' not found in last_30_days for cafe: {cafe_name}. Setting avg_revenue to 0.")
+                    else:
+                        logger.info(f"No data in last_30_days for cafe: {cafe_name}. Traffic and revenue metrics will be zero.")
+
                     # Чеки на сотрудника и ТО на сотрудника
                     checks_per_staff = avg_traffic / row['staff_count'] if row['staff_count'] > 0 else 0
                     revenue_per_staff = avg_revenue / row['staff_count'] if row['staff_count'] > 0 else 0
@@ -739,6 +758,13 @@ class ForecastViews:
                 }
                 
                 passport_data.append(passport_item)
+
+            # Logging for passport_data before returning
+            logger.info(f"Processed passport_data to be returned - count: {len(passport_data)}")
+            if passport_data:
+                logger.info(f"First item of processed passport_data: {passport_data[0]}")
+            else:
+                logger.info("Processed passport_data is empty.")
             
             return jsonify({'passport_data': passport_data})
             

@@ -318,14 +318,31 @@ class DataLoader:
         try:
             passport_file = os.path.join('data', 'passport.xlsx')
             if os.path.exists(passport_file):
-                passport_df = pd.read_excel(passport_file)
+                # Get sheet names before loading all sheets
+                try:
+                    excel_file = pd.ExcelFile(passport_file)
+                    sheet_names = excel_file.sheet_names
+                    logger.info(f"Passport Excel - Sheet names: {sheet_names}")
+                except Exception as e_sheets:
+                    logger.warning(f"Could not read sheet names from {passport_file}: {e_sheets}")
+                    # Attempt to load the first sheet by default if reading sheet names fails
+                    sheet_names = [0] # Use 0 to load the first sheet
+
+                # Load the first sheet by default, or all if multiple sheets are relevant
+                # For now, let's assume the relevant data is in the first sheet.
+                # If all sheets need to be processed, this logic should be adjusted.
+                passport_df = pd.read_excel(passport_file, sheet_name=sheet_names[0] if isinstance(sheet_names, list) and len(sheet_names)>0 else 0)
+                
+                logger.info(f"Passport DataFrame shape: {passport_df.shape}")
+                logger.info(f"Passport DataFrame columns: {passport_df.columns.tolist()}")
+                logger.info(f"Passport DataFrame head:\n{passport_df.head().to_string()}")
                 logger.info(f"Загружены данные паспорта для {len(passport_df)} кафе")
                 return passport_df
             else:
-                logger.warning("Файл паспорта не найден")
+                logger.warning(f"Файл паспорта '{passport_file}' не найден")
                 return pd.DataFrame()
         except Exception as e:
-            logger.error(f"Ошибка при загрузке данных паспорта: {e}")
+            logger.error(f"Ошибка при загрузке данных паспорта из файла '{passport_file}': {e}")
             return pd.DataFrame()
     
     def get_cafe_passport(self, cafe_name: str) -> dict:
