@@ -14,7 +14,7 @@ import yaml
 from data_loader import DataLoader
 from forecast_engine import ForecastEngine
 from presets import PresetManager
-from utils.recommendations import RecommendationEngine
+from src.utils.recommendations import RecommendationEngine
 
 
 @pytest.fixture

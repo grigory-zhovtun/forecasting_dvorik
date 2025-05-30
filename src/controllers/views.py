@@ -221,7 +221,7 @@ class ForecastViews:
             # Получаем рекомендации для текущих метрик
             recommendations = {}
             if self.metrics_cache:
-                from utils.recommendations import RecommendationEngine
+                from src.utils.recommendations import RecommendationEngine
                 rec_engine = RecommendationEngine(self.config)
                 for cafe, metrics in self.metrics_cache.items():
                     recommendations[cafe] = rec_engine.get_recommendations_for_cafe(
@@ -702,7 +702,7 @@ class ForecastViews:
             metrics = self.metrics_cache[cafe]
             
             # Получаем рекомендации
-            from utils.recommendations import RecommendationEngine
+            from src.utils.recommendations import RecommendationEngine
             rec_engine = RecommendationEngine(self.config)
             recommendations = rec_engine.get_recommendations_for_cafe(cafe, metrics, model_type)
             
@@ -734,7 +734,7 @@ class ForecastViews:
             passport_df = self.data_loader.load_passport_data()
             
             # Получаем факты для вычисления динамических показателей
-            facts_df = self.data_loader.facts_df
+            facts_df = self.data_loader.load_data()
             
             passport_data = []
             

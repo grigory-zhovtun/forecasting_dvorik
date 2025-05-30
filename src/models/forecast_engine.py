@@ -47,7 +47,7 @@ class LSTMModel(nn.Module):
 class ForecastEngine:
     """Основной класс для прогнозирования"""
     
-    def __init__(self, config: dict, data_loader):
+    def __init__(self, config: dict, data_loader=None):
         """
         Инициализация движка прогнозирования
         

@@ -17,16 +17,24 @@ logger = logging.getLogger(__name__)
 class DataLoader:
     """Класс для загрузки и подготовки данных"""
     
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_or_path = "config.yaml"):
         """
         Инициализация загрузчика данных
         
         Args:
-            config_path: Путь к файлу конфигурации
+            config_or_path: Путь к файлу конфигурации или словарь с конфигурацией
         """
-        self.config = self._load_config(config_path)
-        self.data_paths = self.config['data']
-        self.excluded_cafes = self.config.get('excluded_cafes', [])
+        if isinstance(config_or_path, dict):
+            self.config = config_or_path
+        else:
+            self.config = self._load_config(config_or_path)
+        self.data_paths = self.config.get('data', {
+            'facts_file': 'facts.xlsx',
+            'holidays_file': 'holidays_df.xlsx',
+            'prophet_holidays_file': 'prophet_holidays_2020_2027.csv',
+            'russian_calendar_file': 'russian_calendar_2020_2027.csv'
+        })
+        self.excluded_cafes = self.config.get('excluded_cafes', ['ПД-15', 'ПД-20', 'ПД-25', 'Кейтеринг', 'Кафе на Садовой', 'Кафе на Невском'])
         self._cache = {}
         
     def _load_config(self, config_path: str) -> dict:

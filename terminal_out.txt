@@ -1,0 +1,131 @@
+PS C:\Users\zhovtun.ga\Documents\automate\forecasting_dvorik_b>
+PS C:\Users\zhovtun.ga\Documents\automate\forecasting_dvorik_b> python app.py
+2025-05-30 08:36:52,792 - src.models.data_loader - ERROR - Ошибка загрузки конфигурации: expected str, bytes or os.PathL
+ike object, not dict
+2025-05-30 08:36:53,682 - src.models.data_loader - INFO - Пользовательские праздники загружены из holidays_df.xlsx
+2025-05-30 08:36:53,694 - src.models.data_loader - INFO - Российские праздники загружены из prophet_holidays_2020_2027.c
+sv
+2025-05-30 08:36:53,701 - src.models.data_loader - INFO - Загружено 102 праздников
+ * Serving Flask app 'app'
+ * Debug mode: on
+2025-05-30 08:36:53,922 - werkzeug - INFO - WARNING: This is a development server. Do not use it in a production deploym
+ent. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.120:5000
+2025-05-30 08:36:53,924 - werkzeug - INFO - Press CTRL+C to quit
+2025-05-30 08:36:53,932 - werkzeug - INFO -  * Restarting with stat
+2025-05-30 08:37:00,432 - src.models.data_loader - ERROR - Ошибка загрузки конфигурации: expected str, bytes or os.PathL
+ike object, not dict
+2025-05-30 08:37:00,789 - src.models.data_loader - INFO - Пользовательские праздники загружены из holidays_df.xlsx
+2025-05-30 08:37:00,798 - src.models.data_loader - INFO - Российские праздники загружены из prophet_holidays_2020_2027.c
+sv
+2025-05-30 08:37:00,801 - src.models.data_loader - INFO - Загружено 102 праздников
+2025-05-30 08:37:00,817 - werkzeug - WARNING -  * Debugger is active!
+2025-05-30 08:37:00,821 - werkzeug - INFO -  * Debugger PIN: 803-530-913
+2025-05-30 08:37:12,450 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:37:12] "GET / HTTP/1.1" 200 -
+2025-05-30 08:37:13,223 - src.models.data_loader - INFO - Загружены данные паспорта для 6 кафе
+2025-05-30 08:37:13,229 - src.controllers.views - ERROR - Ошибка при получении данных паспорта: 'DataLoader' object has
+no attribute 'facts_df'
+2025-05-30 08:37:13,235 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:37:13] "GET /api/passport_data HTTP/1.1" 500 -
+
+2025-05-30 08:37:13,467 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:37:13] "GET /favicon.ico HTTP/1.1" 404 -
+2025-05-30 08:37:14,264 - src.models.data_loader - INFO - Данные загружены из facts.xlsx
+2025-05-30 08:37:14,282 - src.models.data_loader - INFO - Обработано 8768 записей для 8 кафе
+2025-05-30 08:37:14,287 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:37:14] "GET /api/get_initial_data HTTP/1.1" 20
+0 -
+2025-05-30 08:38:12,042 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:12] "POST /api/forecast HTTP/1.1" 200 -
+2025-05-30 08:38:12,207 - cmdstanpy - DEBUG - cmd: where.exe tbb.dll
+cwd: None
+2025-05-30 08:38:12,344 - cmdstanpy - DEBUG - Adding TBB (C:\Users\zhovtun.ga\AppData\Local\Programs\Python\Python310\li
+b\site-packages\prophet\stan_model\cmdstan-2.33.1\stan\lib\stan_math\lib\tbb) to PATH
+2025-05-30 08:38:12,431 - cmdstanpy - DEBUG - input tempfile: C:\Users\zhovtun.ga\AppData\Local\Temp\tmpos5pqu1j\u3_d0ay
+i.json
+2025-05-30 08:38:12,616 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:12] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:12,618 - cmdstanpy - DEBUG - input tempfile: C:\Users\zhovtun.ga\AppData\Local\Temp\tmpos5pqu1j\cebkemq
+e.json
+2025-05-30 08:38:12,638 - cmdstanpy - DEBUG - idx 0
+2025-05-30 08:38:12,640 - cmdstanpy - DEBUG - running CmdStan, num_threads: None
+2025-05-30 08:38:12,649 - cmdstanpy - DEBUG - CmdStan args: ['C:\\Users\\zhovtun.ga\\AppData\\Local\\Programs\\Python\\P
+ython310\\Lib\\site-packages\\prophet\\stan_model\\prophet_model.bin', 'random', 'seed=75971', 'data', 'file=C:\\Users\\
+zhovtun.ga\\AppData\\Local\\Temp\\tmpos5pqu1j\\u3_d0ayi.json', 'init=C:\\Users\\zhovtun.ga\\AppData\\Local\\Temp\\tmpos5
+pqu1j\\cebkemqe.json', 'output', 'file=C:\\Users\\zhovtun.ga\\AppData\\Local\\Temp\\tmpos5pqu1j\\prophet_model271o9x_8\\
+prophet_model-20250530083812.csv', 'method=optimize', 'algorithm=lbfgs', 'iter=10000']
+08:38:12 - cmdstanpy - INFO - Chain [1] start processing
+2025-05-30 08:38:12,650 - cmdstanpy - INFO - Chain [1] start processing
+08:38:12 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-30 08:38:12,801 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-30 08:38:13,058 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:13] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:13,429 - cmdstanpy - DEBUG - cmd: where.exe tbb.dll
+cwd: None
+2025-05-30 08:38:13,556 - cmdstanpy - DEBUG - TBB already found in load path
+2025-05-30 08:38:13,558 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:13] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:13,616 - cmdstanpy - DEBUG - input tempfile: C:\Users\zhovtun.ga\AppData\Local\Temp\tmpos5pqu1j\zk6h7pb
+n.json
+2025-05-30 08:38:13,827 - cmdstanpy - DEBUG - input tempfile: C:\Users\zhovtun.ga\AppData\Local\Temp\tmpos5pqu1j\k95jsm7
+u.json
+2025-05-30 08:38:13,829 - cmdstanpy - DEBUG - idx 0
+2025-05-30 08:38:13,830 - cmdstanpy - DEBUG - running CmdStan, num_threads: None
+2025-05-30 08:38:13,830 - cmdstanpy - DEBUG - CmdStan args: ['C:\\Users\\zhovtun.ga\\AppData\\Local\\Programs\\Python\\P
+ython310\\Lib\\site-packages\\prophet\\stan_model\\prophet_model.bin', 'random', 'seed=22640', 'data', 'file=C:\\Users\\
+zhovtun.ga\\AppData\\Local\\Temp\\tmpos5pqu1j\\zk6h7pbn.json', 'init=C:\\Users\\zhovtun.ga\\AppData\\Local\\Temp\\tmpos5
+pqu1j\\k95jsm7u.json', 'output', 'file=C:\\Users\\zhovtun.ga\\AppData\\Local\\Temp\\tmpos5pqu1j\\prophet_model_jvyu14j\\
+prophet_model-20250530083813.csv', 'method=optimize', 'algorithm=lbfgs', 'iter=10000']
+08:38:13 - cmdstanpy - INFO - Chain [1] start processing
+2025-05-30 08:38:13,831 - cmdstanpy - INFO - Chain [1] start processing
+08:38:13 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-30 08:38:13,974 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-30 08:38:14,057 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:14] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:14,566 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:14] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:15,059 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:15] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:15,100 - src.controllers.views - ERROR - Ошибка при подготовке данных для графика: No module named 'uti
+ls.recommendations'
+2025-05-30 08:38:15,101 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:15] "GET /api/get_forecast_data HTTP/1.1" 5
+00 -
+2025-05-30 08:38:32,836 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:32] "POST /api/forecast HTTP/1.1" 200 -
+2025-05-30 08:38:32,853 - cmdstanpy - DEBUG - cmd: where.exe tbb.dll
+cwd: None
+2025-05-30 08:38:32,973 - cmdstanpy - DEBUG - TBB already found in load path
+2025-05-30 08:38:33,038 - cmdstanpy - DEBUG - input tempfile: C:\Users\zhovtun.ga\AppData\Local\Temp\tmpos5pqu1j\puaa6c3
+2.json
+2025-05-30 08:38:33,247 - cmdstanpy - DEBUG - input tempfile: C:\Users\zhovtun.ga\AppData\Local\Temp\tmpos5pqu1j\34qh0ua
+s.json
+2025-05-30 08:38:33,252 - cmdstanpy - DEBUG - idx 0
+2025-05-30 08:38:33,253 - cmdstanpy - DEBUG - running CmdStan, num_threads: None
+2025-05-30 08:38:33,254 - cmdstanpy - DEBUG - CmdStan args: ['C:\\Users\\zhovtun.ga\\AppData\\Local\\Programs\\Python\\P
+ython310\\Lib\\site-packages\\prophet\\stan_model\\prophet_model.bin', 'random', 'seed=6118', 'data', 'file=C:\\Users\\z
+hovtun.ga\\AppData\\Local\\Temp\\tmpos5pqu1j\\puaa6c32.json', 'init=C:\\Users\\zhovtun.ga\\AppData\\Local\\Temp\\tmpos5p
+qu1j\\34qh0uas.json', 'output', 'file=C:\\Users\\zhovtun.ga\\AppData\\Local\\Temp\\tmpos5pqu1j\\prophet_modelrfdvxhrj\\p
+rophet_model-20250530083833.csv', 'method=optimize', 'algorithm=lbfgs', 'iter=10000']
+08:38:33 - cmdstanpy - INFO - Chain [1] start processing
+2025-05-30 08:38:33,255 - cmdstanpy - INFO - Chain [1] start processing
+2025-05-30 08:38:33,351 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:33] "GET /api/progress HTTP/1.1" 200 -
+08:38:33 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-30 08:38:33,399 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-30 08:38:33,851 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:33] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:33,979 - cmdstanpy - DEBUG - cmd: where.exe tbb.dll
+cwd: None
+2025-05-30 08:38:34,117 - cmdstanpy - DEBUG - TBB already found in load path
+2025-05-30 08:38:34,168 - cmdstanpy - DEBUG - input tempfile: C:\Users\zhovtun.ga\AppData\Local\Temp\tmpos5pqu1j\0mzozwr
+b.json
+2025-05-30 08:38:34,351 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:34] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:34,359 - cmdstanpy - DEBUG - input tempfile: C:\Users\zhovtun.ga\AppData\Local\Temp\tmpos5pqu1j\jbb6mhp
+7.json
+2025-05-30 08:38:34,362 - cmdstanpy - DEBUG - idx 0
+2025-05-30 08:38:34,362 - cmdstanpy - DEBUG - running CmdStan, num_threads: None
+2025-05-30 08:38:34,363 - cmdstanpy - DEBUG - CmdStan args: ['C:\\Users\\zhovtun.ga\\AppData\\Local\\Programs\\Python\\P
+ython310\\Lib\\site-packages\\prophet\\stan_model\\prophet_model.bin', 'random', 'seed=11178', 'data', 'file=C:\\Users\\
+zhovtun.ga\\AppData\\Local\\Temp\\tmpos5pqu1j\\0mzozwrb.json', 'init=C:\\Users\\zhovtun.ga\\AppData\\Local\\Temp\\tmpos5
+pqu1j\\jbb6mhp7.json', 'output', 'file=C:\\Users\\zhovtun.ga\\AppData\\Local\\Temp\\tmpos5pqu1j\\prophet_modelir3q8921\\
+prophet_model-20250530083834.csv', 'method=optimize', 'algorithm=lbfgs', 'iter=10000']
+08:38:34 - cmdstanpy - INFO - Chain [1] start processing
+2025-05-30 08:38:34,364 - cmdstanpy - INFO - Chain [1] start processing
+08:38:34 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-30 08:38:34,524 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-30 08:38:34,848 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:34] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:35,349 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:35] "GET /api/progress HTTP/1.1" 200 -
+2025-05-30 08:38:35,367 - src.controllers.views - ERROR - Ошибка при подготовке данных для графика: No module named 'uti
+ls.recommendations'
+2025-05-30 08:38:35,368 - werkzeug - INFO - 127.0.0.1 - - [30/May/2025 08:38:35] "GET /api/get_forecast_data HTTP/1.1" 5
+00 -
+PS C:\Users\zhovtun.ga\Documents\automate\forecasting_dvorik_b>
