@@ -22,14 +22,16 @@ class RecommendationEngine:
         self.thresholds = config.get('metrics_thresholds', {})
         
         # Расширенные пороги MAPE по умолчанию с детальными рангами
-        self.mape_thresholds = self.thresholds.get('mape', {
+        default_mape_thresholds = {
             'excellent': 5,      # Отличный прогноз
             'good': 10,         # Хороший прогноз
             'acceptable': 15,   # Приемлемый прогноз
             'warning': 20,      # Требует внимания
             'poor': 30,         # Плохой прогноз
             'critical': 40      # Критический прогноз
-        })
+        }
+        # Обновляем дефолтные значения с теми, что переданы в конфиге
+        self.mape_thresholds = {**default_mape_thresholds, **self.thresholds.get('mape', {})}
         
         # Детальные рекомендации по рангам
         self.rank_recommendations = {
