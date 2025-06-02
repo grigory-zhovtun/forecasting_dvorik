@@ -681,18 +681,27 @@ class ForecastEngine:
             # Получаем данные кафе
             df_cafe = self.data_loader.get_cafe_data(cafe)
             
+            # Получаем настройки для конкретного кафе
+            cafe_settings = params.get('cafe_settings', {}).get(cafe, {})
+            
+            # Создаем локальную копию параметров и обновляем их настройками кафе
+            local_params = params.copy()
+            if cafe_settings:
+                # Обновляем параметры настройками конкретного кафе
+                local_params.update(cafe_settings)
+            
             # Подготовка данных
             df_cafe = self.data_loader.prepare_for_forecast(
                 df_cafe,
-                remove_outliers=params.get('remove_outliers', True),
-                outlier_multiplier=params.get('outlier_multiplier', 1.5)
+                remove_outliers=local_params.get('remove_outliers', True),
+                outlier_multiplier=local_params.get('outlier_multiplier', 1.5)
             )
             
             # Выбор модели
-            model_type = params.get('model_type', 'prophet')
+            model_type = local_params.get('model_type', 'prophet')
             
             # Автоматическая настройка гиперпараметров
-            if params.get('auto_tune', False):
+            if local_params.get('auto_tune', False):
                 auto_tune_functions = {
                     'prophet': self.auto_tune_prophet,
                     'arima': self.auto_tune_arima,
@@ -711,22 +720,22 @@ class ForecastEngine:
                         progress_callback(f"Автонастройка параметров для {cafe}, модель {model_type}...")
                     
                     # Автонастройка для трафика
-                    traffic_tuning = auto_tune_func(df_cafe, 'Тр', params.copy(), n_trials)
+                    traffic_tuning = auto_tune_func(df_cafe, 'Тр', local_params.copy(), n_trials)
                     
                     if progress_callback:
                         progress_callback(f"Лучшая MAPE для трафика: {traffic_tuning['mape']:.2f}%")
                     
                     # Автонастройка для среднего чека
-                    check_tuning = auto_tune_func(df_cafe, 'Чек', params.copy(), n_trials)
+                    check_tuning = auto_tune_func(df_cafe, 'Чек', local_params.copy(), n_trials)
                     
                     if progress_callback:
                         progress_callback(f"Лучшая MAPE для среднего чека: {check_tuning['mape']:.2f}%")
                     
                     # Выбираем лучшие параметры
                     if traffic_tuning['mape'] < check_tuning['mape']:
-                        params.update(traffic_tuning['params'])
+                        local_params.update(traffic_tuning['params'])
                     else:
-                        params.update(check_tuning['params'])
+                        local_params.update(check_tuning['params'])
             
             # Функции прогнозирования
             forecast_functions = {
@@ -739,10 +748,10 @@ class ForecastEngine:
             forecast_func = forecast_functions.get(model_type, self.forecast_prophet)
             
             # Прогнозирование трафика
-            forecast_traffic = forecast_func(df_cafe, 'Тр', params)
+            forecast_traffic = forecast_func(df_cafe, 'Тр', local_params)
             
             # Прогнозирование среднего чека
-            forecast_check = forecast_func(df_cafe, 'Чек', params)
+            forecast_check = forecast_func(df_cafe, 'Чек', local_params)
             
             # Объединение результатов
             result = pd.DataFrame({
