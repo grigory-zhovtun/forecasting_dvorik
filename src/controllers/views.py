@@ -223,6 +223,7 @@ class ForecastViews:
             
             # Получаем рекомендации для текущих метрик
             recommendations = {}
+            structured_recommendations = {}
             if self.metrics_cache:
                 from src.utils.recommendations import RecommendationEngine
                 rec_engine = RecommendationEngine(self.config)
@@ -230,6 +231,14 @@ class ForecastViews:
                     recommendations[cafe] = rec_engine.get_recommendations_for_cafe(
                         cafe, metrics, forecast_params.get('model_type', 'prophet')
                     )
+                    # Добавляем структурированные рекомендации для каждой метрики
+                    structured_recommendations[cafe] = {}
+                    for metric_type in ['revenue', 'traffic', 'check']:
+                        mape_key = f'MAPE_{metric_type}'
+                        if mape_key in metrics and metrics[mape_key] is not None:
+                            structured_recommendations[cafe][metric_type] = rec_engine.get_structured_recommendations_for_metric(
+                                metric_type, metrics[mape_key], metrics.get(f'RMSE_{metric_type}')
+                            )
             
             return jsonify({
                 'data': traces,
@@ -237,7 +246,8 @@ class ForecastViews:
                 'metrics': self.metrics_cache,
                 'params': forecast_params,
                 'summary_data': summary_data,
-                'recommendations': recommendations
+                'recommendations': recommendations,
+                'structured_recommendations': structured_recommendations
             })
             
         except Exception as e:

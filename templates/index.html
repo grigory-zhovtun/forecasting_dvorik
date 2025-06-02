@@ -201,14 +201,20 @@
             padding: 0.3rem 0.8rem;
         }
 
-        /* Color coding for metrics */
+        /* Enhanced color coding for metrics with more ranges */
         .metric-excellent {
             background-color: #28a745 !important;
             color: white;
+            font-weight: 600;
         }
 
         .metric-good {
             background-color: #5cb85c !important;
+            color: white;
+        }
+        
+        .metric-acceptable {
+            background-color: #17a2b8 !important;
             color: white;
         }
 
@@ -225,6 +231,50 @@
         .metric-critical {
             background-color: #dc3545 !important;
             color: white;
+            font-weight: 600;
+        }
+        
+        .metric-catastrophic {
+            background-color: #721c24 !important;
+            color: white;
+            font-weight: 700;
+            animation: pulse-critical 2s infinite;
+        }
+        
+        @keyframes pulse-critical {
+            0% {
+                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+            }
+        }
+        
+        /* Recommendation popover styling */
+        .recommendation-popover {
+            max-width: 400px;
+            font-size: 0.9rem;
+        }
+        
+        .recommendation-popover .popover-header {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .recommendation-popover .popover-body {
+            padding: 1rem;
+        }
+        
+        .recommendation-list {
+            margin: 0;
+            padding-left: 1.2rem;
+        }
+        
+        .recommendation-list li {
+            margin-bottom: 0.5rem;
         }
 
         #chartContainer {
@@ -272,39 +322,160 @@
                 width: 100%;
             }
         }
-        /* Color groups for summary table */
+        /* Color groups for summary table with enhanced design */
         .fact-group {
-            background-color: #e3f2fd !important;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important;
+            position: relative;
         }
         
         .plan-group {
-            background-color: #f3e5f5 !important;
+            background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%) !important;
+            position: relative;
         }
         
         .total-group {
-            background-color: #e8f5e9 !important;
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%) !important;
+            position: relative;
+            font-weight: 600;
         }
         
         .deviation-group {
-            background-color: #fff3e0 !important;
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%) !important;
+            position: relative;
+        }
+        
+        /* Additional enhancements for table cells */
+        #cafeSummaryTable td {
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        #cafeSummaryTable tbody tr:hover td {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        #cafeSummaryTable tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.7) !important;
+        }
+        
+        /* Special styling for delta values */
+        .total-group {
+            position: relative;
+        }
+        
+        .total-group:before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 60%;
+            background: #4caf50;
+            border-radius: 2px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        tr:hover .total-group:before {
+            opacity: 1;
+        }
+        
+        /* Deviation styling with color indicators */
+        .deviation-group {
+            font-weight: 600;
+        }
+        
+        .deviation-positive {
+            color: #2e7d32;
+        }
+        
+        .deviation-negative {
+            color: #c62828;
+        }
+        
+        .deviation-neutral {
+            color: #757575;
         }
         
         thead th.fact-group,
         thead th.plan-group,
         thead th.total-group,
         thead th.deviation-group {
-            font-weight: 600;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.9rem;
+            padding: 1rem;
+            border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Header hover effects */
+        thead th:hover {
+            background-color: rgba(255, 255, 255, 0.3) !important;
+        }
+        
+        /* Summary table border styling */
+        #cafeSummaryTable {
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        #cafeSummaryTable thead tr:first-child th:first-child {
+            border-top-left-radius: 10px;
+        }
+        
+        #cafeSummaryTable thead tr:first-child th:last-child {
+            border-top-right-radius: 10px;
+        }
+        
+        /* Footer styling */
+        #cafeSummaryTable tfoot {
+            font-weight: 700;
+            background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+        }
+        
+        #cafeSummaryTable tfoot td {
+            border-top: 3px solid #bdbdbd;
+            padding: 1rem;
         }
         
         tbody td.fact-group,
         tbody td.plan-group,
         tbody td.total-group,
-        tbody td.deviation-group,
+        tbody td.deviation-group {
+            background-color: inherit;
+            padding: 0.875rem;
+        }
+        
         tfoot td.fact-group,
         tfoot td.plan-group,
         tfoot td.total-group,
         tfoot td.deviation-group {
-            background-color: inherit;
+            background-color: transparent !important;
+        }
+        
+        /* Pulse animation for important values */
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+            }
+        }
+        
+        .important-value {
+            animation: pulse 2s infinite;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
         }
     </style>
 </head>
@@ -561,18 +732,18 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th rowspan="2">Кафе</th>
-                                        <th colspan="3" class="text-center fact-group">Факт</th>
                                         <th colspan="3" class="text-center plan-group">План</th>
-                                        <th colspan="3" class="text-center total-group">Итог</th>
+                                        <th colspan="3" class="text-center fact-group">Факт</th>
+                                        <th colspan="3" class="text-center total-group">Дельта</th>
                                         <th colspan="3" class="text-center deviation-group">Отклонение</th>
                                     </tr>
                                     <tr>
-                                        <th class="fact-group">Выручка</th>
-                                        <th class="fact-group">Трафик</th>
-                                        <th class="fact-group">Средний чек</th>
                                         <th class="plan-group">Выручка</th>
                                         <th class="plan-group">Трафик</th>
                                         <th class="plan-group">Средний чек</th>
+                                        <th class="fact-group">Выручка</th>
+                                        <th class="fact-group">Трафик</th>
+                                        <th class="fact-group">Средний чек</th>
                                         <th class="total-group">Выручка</th>
                                         <th class="total-group">Трафик</th>
                                         <th class="total-group">Средний чек</th>
@@ -586,12 +757,12 @@
                                 <tfoot class="table-light">
                                     <tr>
                                         <th>Итого</th>
-                                        <td id="totalRevenueActual" class="fact-group">---</td>
-                                        <td id="totalTrafficActual" class="fact-group">---</td>
-                                        <td id="totalAvgCheckActual" class="fact-group">---</td>
                                         <td id="totalRevenueForecast" class="plan-group">---</td>
                                         <td id="totalTrafficForecast" class="plan-group">---</td>
                                         <td id="totalAvgCheckForecast" class="plan-group">---</td>
+                                        <td id="totalRevenueActual" class="fact-group">---</td>
+                                        <td id="totalTrafficActual" class="fact-group">---</td>
+                                        <td id="totalAvgCheckActual" class="fact-group">---</td>
                                         <td id="totalRevenueTotal" class="total-group">---</td>
                                         <td id="totalTrafficTotal" class="total-group">---</td>
                                         <td id="totalAvgCheckTotal" class="total-group">---</td>
@@ -847,15 +1018,19 @@
         // Функция для определения цветового класса на основе MAPE
         function getMapeColorClass(mapeValue) {
             if (mapeValue <= 5) {
-                return 'metric-excellent';  // Отличный прогноз
+                return 'metric-excellent';      // Отличный прогноз
             } else if (mapeValue <= 10) {
-                return 'metric-good';       // Хороший прогноз
+                return 'metric-good';           // Хороший прогноз
+            } else if (mapeValue <= 15) {
+                return 'metric-acceptable';     // Приемлемый прогноз
             } else if (mapeValue <= 20) {
-                return 'metric-warning';    // Средний прогноз
+                return 'metric-warning';        // Требует внимания
             } else if (mapeValue <= 30) {
-                return 'metric-poor';       // Плохой прогноз
+                return 'metric-poor';           // Плохой прогноз
+            } else if (mapeValue <= 40) {
+                return 'metric-critical';       // Критический прогноз
             } else {
-                return 'metric-critical';   // Критический прогноз
+                return 'metric-catastrophic';   // Катастрофический прогноз
             }
         }
 
@@ -1204,6 +1379,11 @@
                     
                     // Сохраняем данные для корректировок
                     forecastData = response;
+                    
+                    // Обновляем метрики с рекомендациями
+                    if (response.metrics && Object.keys(response.metrics).length > 0) {
+                        renderMetricsTable(response.metrics, response.structured_recommendations);
+                    }
                 } else {
                     $('#chartContainer').html(`
                         <div class="empty-state">
@@ -1262,103 +1442,8 @@
                     }
 
                     // Обновляем метрики качества
-                    const metricsTable = $("#metricsTable");
-                    metricsTable.empty(); // Clear previous metrics
                     if (response.metrics && Object.keys(response.metrics).length > 0) {
-                        Object.entries(response.metrics).forEach(([cafe, cafeMetrics]) => {
-                            // Revenue
-                            let rowRevenue = $('<tr>');
-                            rowRevenue.append($('<td>').attr('rowspan', 3).css('vertical-align', 'middle').text(cafe));
-                            rowRevenue.append($('<td>').text('Выручка'));
-                            
-                            // MAPE для выручки с цветовой разметкой
-                            let mapeCellRevenue = $('<td>');
-                            if (cafeMetrics.MAPE_revenue !== null && cafeMetrics.MAPE_revenue !== undefined) {
-                                let mapeValue = cafeMetrics.MAPE_revenue;
-                                let mapeClass = getMapeColorClass(mapeValue);
-                                mapeCellRevenue.html(`<span class="badge ${mapeClass}">${mapeValue.toFixed(2)}%</span>`);
-                            } else {
-                                mapeCellRevenue.text("N/A");
-                            }
-                            rowRevenue.append(mapeCellRevenue);
-                            
-                            // MAE
-                            rowRevenue.append($('<td>').text(cafeMetrics.MAE_revenue !== null ? cafeMetrics.MAE_revenue.toLocaleString('ru-RU') + " ₽" : "N/A"));
-                            
-                            // RMSE
-                            rowRevenue.append($('<td>').text(cafeMetrics.RMSE_revenue !== null ? cafeMetrics.RMSE_revenue.toLocaleString('ru-RU') + " ₽" : "N/A"));
-                            
-                            // R²
-                            rowRevenue.append($('<td>').text(cafeMetrics.R2_revenue !== null ? cafeMetrics.R2_revenue.toFixed(4) : "N/A"));
-                            
-                            // Рекомендации
-                            let recCell = $('<td>').attr('rowspan', 3).css('vertical-align', 'middle');
-                            if (response.recommendations && response.recommendations[cafe]) {
-                                const rec = response.recommendations[cafe];
-                                const tooltip = rec.general_recommendations[0] || "Нет рекомендаций";
-                                recCell.html(`<i class="bi bi-info-circle text-primary" data-bs-toggle="tooltip" title="${tooltip}"></i>`);
-                                // Инициализируем новый tooltip
-                                new bootstrap.Tooltip(recCell.find('i')[0]);
-                            }
-                            rowRevenue.append(recCell);
-                            
-                            metricsTable.append(rowRevenue);
-
-                            // Traffic
-                            let rowTraffic = $('<tr>');
-                            rowTraffic.append($('<td>').text('Трафик'));
-                            
-                            // MAPE для трафика с цветовой разметкой
-                            let mapeCellTraffic = $('<td>');
-                            if (cafeMetrics.MAPE_traffic !== null && cafeMetrics.MAPE_traffic !== undefined) {
-                                let mapeValue = cafeMetrics.MAPE_traffic;
-                                let mapeClass = getMapeColorClass(mapeValue);
-                                mapeCellTraffic.html(`<span class="badge ${mapeClass}">${mapeValue.toFixed(2)}%</span>`);
-                            } else {
-                                mapeCellTraffic.text("N/A");
-                            }
-                            rowTraffic.append(mapeCellTraffic);
-                            
-                            // MAE
-                            rowTraffic.append($('<td>').text(cafeMetrics.MAE_traffic !== null ? cafeMetrics.MAE_traffic.toLocaleString('ru-RU') : "N/A"));
-                            
-                            // RMSE
-                            rowTraffic.append($('<td>').text(cafeMetrics.RMSE_traffic !== null ? cafeMetrics.RMSE_traffic.toLocaleString('ru-RU') : "N/A"));
-                            
-                            // R²
-                            rowTraffic.append($('<td>').text(cafeMetrics.R2_traffic !== null ? cafeMetrics.R2_traffic.toFixed(4) : "N/A"));
-                            
-                            metricsTable.append(rowTraffic);
-
-                            // Check
-                            let rowCheck = $('<tr>');
-                            rowCheck.append($('<td>').text('Средний чек'));
-                            
-                            // MAPE для среднего чека с цветовой разметкой
-                            let mapeCellCheck = $('<td>');
-                            if (cafeMetrics.MAPE_check !== null && cafeMetrics.MAPE_check !== undefined) {
-                                let mapeValue = cafeMetrics.MAPE_check;
-                                let mapeClass = getMapeColorClass(mapeValue);
-                                mapeCellCheck.html(`<span class="badge ${mapeClass}">${mapeValue.toFixed(2)}%</span>`);
-                            } else {
-                                mapeCellCheck.text("N/A");
-                            }
-                            rowCheck.append(mapeCellCheck);
-                            
-                            // MAE
-                            rowCheck.append($('<td>').text(cafeMetrics.MAE_check !== null ? cafeMetrics.MAE_check.toLocaleString('ru-RU') + " ₽" : "N/A"));
-                            
-                            // RMSE
-                            rowCheck.append($('<td>').text(cafeMetrics.RMSE_check !== null ? cafeMetrics.RMSE_check.toLocaleString('ru-RU') + " ₽" : "N/A"));
-                            
-                            // R²
-                            rowCheck.append($('<td>').text(cafeMetrics.R2_check !== null ? cafeMetrics.R2_check.toFixed(4) : "N/A"));
-                            
-                            metricsTable.append(rowCheck);
-                        });
-                        // Метрики уже видны через табы
-                    } else {
-                        // Метрики скрыты через табы
+                        renderMetricsTable(response.metrics, response.structured_recommendations);
                     }
 
                 } else {
@@ -1378,6 +1463,136 @@
             });
         }
 
+        // Функция для отрисовки таблицы с метриками
+        function renderMetricsTable(metrics, structuredRecommendations) {
+            const metricsTable = $("#metricsTable");
+            metricsTable.empty();
+            
+            Object.entries(metrics).forEach(([cafe, cafeMetrics]) => {
+                const metricTypes = ['revenue', 'traffic', 'check'];
+                const metricNames = {
+                    'revenue': 'Выручка',
+                    'traffic': 'Трафик',
+                    'check': 'Средний чек'
+                };
+                
+                metricTypes.forEach((metricType, index) => {
+                    let row = $('<tr>');
+                    
+                    // Кафе (только для первой строки)
+                    if (index === 0) {
+                        row.append($('<td>').attr('rowspan', 3).css('vertical-align', 'middle').html(`<strong>${cafe}</strong>`));
+                    }
+                    
+                    // Показатель
+                    row.append($('<td>').text(metricNames[metricType]));
+                    
+                    // MAPE с цветовой разметкой
+                    let mapeCell = $('<td>');
+                    const mapeKey = `MAPE_${metricType}`;
+                    if (cafeMetrics[mapeKey] !== null && cafeMetrics[mapeKey] !== undefined) {
+                        let mapeValue = cafeMetrics[mapeKey];
+                        let mapeClass = getMapeColorClass(mapeValue);
+                        mapeCell.html(`<span class="badge ${mapeClass}">${mapeValue.toFixed(2)}%</span>`);
+                    } else {
+                        mapeCell.text("N/A");
+                    }
+                    row.append(mapeCell);
+                    
+                    // MAE
+                    const maeKey = `MAE_${metricType}`;
+                    const maeValue = cafeMetrics[maeKey];
+                    let maeText = "N/A";
+                    if (maeValue !== null && maeValue !== undefined) {
+                        if (metricType === 'traffic') {
+                            maeText = maeValue.toLocaleString('ru-RU');
+                        } else {
+                            maeText = maeValue.toLocaleString('ru-RU') + " ₽";
+                        }
+                    }
+                    row.append($('<td>').text(maeText));
+                    
+                    // RMSE
+                    const rmseKey = `RMSE_${metricType}`;
+                    const rmseValue = cafeMetrics[rmseKey];
+                    let rmseText = "N/A";
+                    if (rmseValue !== null && rmseValue !== undefined) {
+                        if (metricType === 'traffic') {
+                            rmseText = rmseValue.toLocaleString('ru-RU');
+                        } else {
+                            rmseText = rmseValue.toLocaleString('ru-RU') + " ₽";
+                        }
+                    }
+                    row.append($('<td>').text(rmseText));
+                    
+                    // R²
+                    const r2Key = `R2_${metricType}`;
+                    const r2Value = cafeMetrics[r2Key];
+                    row.append($('<td>').text(r2Value !== null ? r2Value.toFixed(4) : "N/A"));
+                    
+                    // Рекомендации (только для первой строки)
+                    if (index === 0) {
+                        let recCell = $('<td>').attr('rowspan', 3).css('vertical-align', 'middle');
+                        
+                        if (structuredRecommendations && structuredRecommendations[cafe]) {
+                            const structRecs = structuredRecommendations[cafe];
+                            
+                            // Создаем кнопку для рекомендаций
+                            const btnId = `rec-btn-${cafe.replace(/\s+/g, '-')}`;
+                            recCell.html(`
+                                <button type="button" class="btn btn-sm btn-outline-primary" 
+                                        id="${btnId}"
+                                        data-bs-toggle="popover"
+                                        data-bs-trigger="focus"
+                                        title="Рекомендации для ${cafe}">
+                                    <i class="bi bi-lightbulb"></i> Показать
+                                </button>
+                            `);
+                            
+                            // Формируем контент для поповера
+                            let popoverContent = '<div class="recommendation-content">';
+                            
+                            metricTypes.forEach(mType => {
+                                if (structRecs[mType]) {
+                                    const rec = structRecs[mType];
+                                    
+                                    popoverContent += `
+                                        <div class="mb-3">
+                                            <h6>${metricNames[mType]} 
+                                                <span class="badge ${rec.color_class}">${rec.quality_rus}</span>
+                                            </h6>
+                                            <p class="mb-1"><strong>${rec.general_recommendation}</strong></p>
+                                            <p class="mb-1 text-danger">${rec.action_required}</p>
+                                            <ul class="recommendation-list small">
+                                                ${rec.all_tips.slice(0, 3).map(tip => `<li>${tip}</li>`).join('')}
+                                            </ul>
+                                        </div>
+                                    `;
+                                }
+                            });
+                            
+                            popoverContent += '</div>';
+                            
+                            // Инициализация поповера после добавления в DOM
+                            setTimeout(() => {
+                                const popover = new bootstrap.Popover(document.getElementById(btnId), {
+                                    html: true,
+                                    content: popoverContent,
+                                    placement: 'left',
+                                    customClass: 'recommendation-popover',
+                                    sanitize: false
+                                });
+                            }, 100);
+                        }
+                        
+                        row.append(recCell);
+                    }
+                    
+                    metricsTable.append(row);
+                });
+            });
+        }
+        
         // Функция для отрисовки таблицы со сводными данными
         function renderSummaryTable(summaryData) {
             const formatNumber = (num, options = {}) => {
@@ -1387,7 +1602,7 @@
             
             const calculateDeviation = (actual, forecast) => {
                 if (forecast === 0) return 0;
-                return ((actual - forecast) / forecast) * 100;
+                return ((actual / forecast) - 1) * 100;
             };
 
             const defaultCell = '---';
@@ -1396,14 +1611,14 @@
 
             if (!summaryData || !summaryData.cafes) {
                 // Clear totals
-                $('#totalRevenueActual').text(defaultCell);
                 $('#totalRevenueForecast').text(defaultCell);
-                $('#totalRevenueTotal').text(defaultCell);
-                $('#totalTrafficActual').text(defaultCell);
                 $('#totalTrafficForecast').text(defaultCell);
-                $('#totalTrafficTotal').text(defaultCell);
-                $('#totalAvgCheckActual').text(defaultCell);
                 $('#totalAvgCheckForecast').text(defaultCell);
+                $('#totalRevenueActual').text(defaultCell);
+                $('#totalTrafficActual').text(defaultCell);
+                $('#totalAvgCheckActual').text(defaultCell);
+                $('#totalRevenueTotal').text(defaultCell);
+                $('#totalTrafficTotal').text(defaultCell);
                 $('#totalAvgCheckTotal').text(defaultCell);
                 $('#totalRevenueDeviation').text(defaultCell);
                 $('#totalTrafficDeviation').text(defaultCell);
@@ -1415,14 +1630,14 @@
             Object.entries(summaryData.cafes).forEach(([cafe, data]) => {
                 const revActual = data.revenue.actual || 0;
                 const revForecast = data.revenue.forecast || 0;
-                const revTotal = data.revenue.total || 0;
+                const revDelta = revActual - revForecast;  // Дельта = Факт - План
                 const trafActual = data.traffic.actual || 0;
                 const trafForecast = data.traffic.forecast || 0;
-                const trafTotal = data.traffic.total || 0;
+                const trafDelta = trafActual - trafForecast;  // Дельта = Факт - План
                 
                 const avgCheckActual = trafActual !== 0 ? revActual / trafActual : 0;
                 const avgCheckForecast = trafForecast !== 0 ? revForecast / trafForecast : 0;
-                const avgCheckTotal = trafTotal !== 0 ? revTotal / trafTotal : 0;
+                const avgCheckDelta = avgCheckActual - avgCheckForecast;  // Дельта = Факт - План
                 
                 const revDeviation = calculateDeviation(revActual, revForecast);
                 const trafDeviation = calculateDeviation(trafActual, trafForecast);
@@ -1430,18 +1645,31 @@
                 
                 const row = $('<tr>');
                 row.append($('<td>').text(cafe));
-                row.append($('<td>').addClass('fact-group').text(formatNumber(revActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
-                row.append($('<td>').addClass('fact-group').text(formatNumber(trafActual, { maximumFractionDigits: 0 })));
-                row.append($('<td>').addClass('fact-group').text(formatNumber(avgCheckActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                // План
                 row.append($('<td>').addClass('plan-group').text(formatNumber(revForecast, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
                 row.append($('<td>').addClass('plan-group').text(formatNumber(trafForecast, { maximumFractionDigits: 0 })));
                 row.append($('<td>').addClass('plan-group').text(formatNumber(avgCheckForecast, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
-                row.append($('<td>').addClass('total-group').text(formatNumber(revTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
-                row.append($('<td>').addClass('total-group').text(formatNumber(trafTotal, { maximumFractionDigits: 0 })));
-                row.append($('<td>').addClass('total-group').text(formatNumber(avgCheckTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
-                row.append($('<td>').addClass('deviation-group').text(revDeviation !== 0 ? formatNumber(revDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'));
-                row.append($('<td>').addClass('deviation-group').text(trafDeviation !== 0 ? formatNumber(trafDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'));
-                row.append($('<td>').addClass('deviation-group').text(checkDeviation !== 0 ? formatNumber(checkDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'));
+                // Факт
+                row.append($('<td>').addClass('fact-group').text(formatNumber(revActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('fact-group').text(formatNumber(trafActual, { maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('fact-group').text(formatNumber(avgCheckActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                // Дельта
+                row.append($('<td>').addClass('total-group').text(formatNumber(revDelta, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('total-group').text(formatNumber(trafDelta, { maximumFractionDigits: 0 })));
+                row.append($('<td>').addClass('total-group').text(formatNumber(avgCheckDelta, { minimumFractionDigits: 0, maximumFractionDigits: 0 })));
+                // Отклонение с цветовой индикацией
+                const getDeviationClass = (value) => {
+                    if (value > 5) return 'deviation-positive';
+                    if (value < -5) return 'deviation-negative';
+                    return 'deviation-neutral';
+                };
+                
+                row.append($('<td>').addClass('deviation-group').addClass(getDeviationClass(revDeviation))
+                    .text(revDeviation !== 0 ? formatNumber(revDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%' : '0%'));
+                row.append($('<td>').addClass('deviation-group').addClass(getDeviationClass(trafDeviation))
+                    .text(trafDeviation !== 0 ? formatNumber(trafDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%' : '0%'));
+                row.append($('<td>').addClass('deviation-group').addClass(getDeviationClass(checkDeviation))
+                    .text(checkDeviation !== 0 ? formatNumber(checkDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%' : '0%'));
                 tbody.append(row);
             });
 
@@ -1450,31 +1678,40 @@
                 const totalData = summaryData.total;
                 const revActual = totalData.revenue.actual || 0;
                 const revForecast = totalData.revenue.forecast || 0;
-                const revTotal = totalData.revenue.total || 0;
+                const revDelta = revActual - revForecast;  // Дельта = Факт - План
                 const trafActual = totalData.traffic.actual || 0;
                 const trafForecast = totalData.traffic.forecast || 0;
-                const trafTotal = totalData.traffic.total || 0;
+                const trafDelta = trafActual - trafForecast;  // Дельта = Факт - План
                 
                 const avgCheckActual = trafActual !== 0 ? revActual / trafActual : 0;
                 const avgCheckForecast = trafForecast !== 0 ? revForecast / trafForecast : 0;
-                const avgCheckTotal = trafTotal !== 0 ? revTotal / trafTotal : 0;
+                const avgCheckDelta = avgCheckActual - avgCheckForecast;  // Дельта = Факт - План
                 
                 const revDeviation = calculateDeviation(revActual, revForecast);
                 const trafDeviation = calculateDeviation(trafActual, trafForecast);
                 const checkDeviation = calculateDeviation(avgCheckActual, avgCheckForecast);
                 
-                $('#totalRevenueActual').text(formatNumber(revActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
                 $('#totalRevenueForecast').text(formatNumber(revForecast, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
-                $('#totalRevenueTotal').text(formatNumber(revTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
-                $('#totalTrafficActual').text(formatNumber(trafActual, { maximumFractionDigits: 0 }));
                 $('#totalTrafficForecast').text(formatNumber(trafForecast, { maximumFractionDigits: 0 }));
-                $('#totalTrafficTotal').text(formatNumber(trafTotal, { maximumFractionDigits: 0 }));
-                $('#totalAvgCheckActual').text(formatNumber(avgCheckActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
                 $('#totalAvgCheckForecast').text(formatNumber(avgCheckForecast, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
-                $('#totalAvgCheckTotal').text(formatNumber(avgCheckTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
-                $('#totalRevenueDeviation').text(revDeviation !== 0 ? formatNumber(revDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0');
-                $('#totalTrafficDeviation').text(trafDeviation !== 0 ? formatNumber(trafDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0');
-                $('#totalAvgCheckDeviation').text(checkDeviation !== 0 ? formatNumber(checkDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0');
+                $('#totalRevenueActual').text(formatNumber(revActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalTrafficActual').text(formatNumber(trafActual, { maximumFractionDigits: 0 }));
+                $('#totalAvgCheckActual').text(formatNumber(avgCheckActual, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalRevenueTotal').text(formatNumber(revDelta, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                $('#totalTrafficTotal').text(formatNumber(trafDelta, { maximumFractionDigits: 0 }));
+                $('#totalAvgCheckTotal').text(formatNumber(avgCheckDelta, { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+                const getDeviationClass = (value) => {
+                    if (value > 5) return 'deviation-positive';
+                    if (value < -5) return 'deviation-negative';
+                    return 'deviation-neutral';
+                };
+                
+                $('#totalRevenueDeviation').text(revDeviation !== 0 ? formatNumber(revDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%' : '0%')
+                    .removeClass('deviation-positive deviation-negative deviation-neutral').addClass(getDeviationClass(revDeviation));
+                $('#totalTrafficDeviation').text(trafDeviation !== 0 ? formatNumber(trafDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%' : '0%')
+                    .removeClass('deviation-positive deviation-negative deviation-neutral').addClass(getDeviationClass(trafDeviation));
+                $('#totalAvgCheckDeviation').text(checkDeviation !== 0 ? formatNumber(checkDeviation, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%' : '0%')
+                    .removeClass('deviation-positive deviation-negative deviation-neutral').addClass(getDeviationClass(checkDeviation));
             }
         }
     </script>

@@ -21,13 +21,49 @@ class RecommendationEngine:
         self.config = config
         self.thresholds = config.get('metrics_thresholds', {})
         
-        # Пороги MAPE по умолчанию
+        # Расширенные пороги MAPE по умолчанию с детальными рангами
         self.mape_thresholds = self.thresholds.get('mape', {
-            'excellent': 5,
-            'good': 10,
-            'warning': 20,
-            'poor': 30
+            'excellent': 5,      # Отличный прогноз
+            'good': 10,         # Хороший прогноз
+            'acceptable': 15,   # Приемлемый прогноз
+            'warning': 20,      # Требует внимания
+            'poor': 30,         # Плохой прогноз
+            'critical': 40      # Критический прогноз
         })
+        
+        # Детальные рекомендации по рангам
+        self.rank_recommendations = {
+            'excellent': {
+                'general': 'Отличное качество прогноза. Модель хорошо настроена.',
+                'action': 'Продолжайте использовать текущие настройки.',
+                'tips': ['Периодически проверяйте актуальность модели', 'Отслеживайте изменения в бизнес-процессах']
+            },
+            'good': {
+                'general': 'Хорошее качество прогноза. Возможны небольшие улучшения.',
+                'action': 'Рассмотрите тонкую настройку параметров.',
+                'tips': ['Проверьте сезонные компоненты', 'Убедитесь в учете всех праздников']
+            },
+            'acceptable': {
+                'general': 'Приемлемое качество прогноза. Есть потенциал для улучшения.',
+                'action': 'Рекомендуется оптимизация модели.',
+                'tips': ['Увеличьте объем обучающей выборки', 'Проверьте наличие выбросов в данных']
+            },
+            'warning': {
+                'general': 'Качество прогноза требует внимания.',
+                'action': 'Необходима настройка параметров модели.',
+                'tips': ['Проанализируйте аномалии в данных', 'Попробуйте другую модель прогнозирования']
+            },
+            'poor': {
+                'general': 'Низкое качество прогноза. Требуются значительные улучшения.',
+                'action': 'Критически пересмотрите подход к прогнозированию.',
+                'tips': ['Проверьте качество входных данных', 'Рассмотрите использование ансамбля моделей']
+            },
+            'critical': {
+                'general': 'Критически низкое качество прогноза.',
+                'action': 'Срочно требуется полный пересмотр методологии.',
+                'tips': ['Проведите аудит данных', 'Привлеките экспертов для анализа']
+            }
+        }
         
         # Пороги RMSE по умолчанию
         self.rmse_thresholds = self.thresholds.get('rmse', {
@@ -54,10 +90,11 @@ class RecommendationEngine:
             'metrics_summary': self._get_metrics_summary(metrics),
             'general_recommendations': [],
             'parameter_recommendations': {},
-            'model_recommendations': []
+            'model_recommendations': [],
+            'rank_based_recommendations': {}
         }
         
-        # Анализ метрик и генерация рекомендаций
+        # Анализ метрик и генерация рекомендаций по рангам
         for metric_type in ['revenue', 'traffic', 'check']:
             mape_key = f'MAPE_{metric_type}'
             rmse_key = f'RMSE_{metric_type}'
@@ -66,8 +103,18 @@ class RecommendationEngine:
                 mape_value = metrics[mape_key]
                 quality = self._get_mape_quality(mape_value)
                 
-                if quality in ['warning', 'poor', 'critical']:
-                    # Генерируем рекомендации для плохих метрик
+                # Добавляем рекомендации на основе рангов
+                rank_rec = self.rank_recommendations.get(quality, {})
+                recommendations['rank_based_recommendations'][metric_type] = {
+                    'rank': quality,
+                    'rank_rus': self._get_quality_rus(quality),
+                    'general': rank_rec.get('general', ''),
+                    'action': rank_rec.get('action', ''),
+                    'tips': rank_rec.get('tips', [])
+                }
+                
+                # Генерируем детальные рекомендации для проблемных метрик
+                if quality in ['acceptable', 'warning', 'poor', 'critical', 'catastrophic']:
                     recs = self._generate_metric_recommendations(
                         metric_type, mape_value, metrics.get(rmse_key), model_type
                     )
@@ -102,26 +149,32 @@ class RecommendationEngine:
         return summary
     
     def _get_mape_quality(self, mape: float) -> str:
-        """Определение качества прогноза по MAPE"""
+        """Определение качества прогноза по MAPE с расширенными рангами"""
         if mape <= self.mape_thresholds['excellent']:
             return 'excellent'
         elif mape <= self.mape_thresholds['good']:
             return 'good'
+        elif mape <= self.mape_thresholds['acceptable']:
+            return 'acceptable'
         elif mape <= self.mape_thresholds['warning']:
             return 'warning'
         elif mape <= self.mape_thresholds['poor']:
             return 'poor'
-        else:
+        elif mape <= self.mape_thresholds['critical']:
             return 'critical'
+        else:
+            return 'catastrophic'
     
     def _get_quality_rus(self, quality: str) -> str:
         """Перевод качества на русский"""
         translations = {
             'excellent': 'Отличное',
             'good': 'Хорошее',
-            'warning': 'Среднее',
+            'acceptable': 'Приемлемое',
+            'warning': 'Требует внимания',
             'poor': 'Плохое',
-            'critical': 'Критическое'
+            'critical': 'Критическое',
+            'catastrophic': 'Катастрофическое'
         }
         return translations.get(quality, quality)
     
@@ -349,9 +402,11 @@ class RecommendationEngine:
         color_map = {
             'excellent': 'metric-excellent',
             'good': 'metric-good',
+            'acceptable': 'metric-acceptable',
             'warning': 'metric-warning',
             'poor': 'metric-poor',
-            'critical': 'metric-critical'
+            'critical': 'metric-critical',
+            'catastrophic': 'metric-catastrophic'
         }
         
         return color_map.get(quality, 'metric-warning')
@@ -379,3 +434,84 @@ class RecommendationEngine:
             return "\\n".join(recommendation['general_recommendations'][:2])
         
         return "Нет специфических рекомендаций"
+    
+    def get_structured_recommendations_for_metric(self, metric_type: str, mape_value: float, 
+                                                 rmse_value: Optional[float] = None) -> dict:
+        """
+        Получение структурированных рекомендаций для конкретной метрики
+        
+        Args:
+            metric_type: Тип метрики (revenue, traffic, check)
+            mape_value: Значение MAPE
+            rmse_value: Значение RMSE (опционально)
+            
+        Returns:
+            Словарь со структурированными рекомендациями
+        """
+        quality = self._get_mape_quality(mape_value)
+        rank_rec = self.rank_recommendations.get(quality, {})
+        
+        metric_name_rus = {
+            'revenue': 'выручки',
+            'traffic': 'трафика', 
+            'check': 'среднего чека'
+        }.get(metric_type, metric_type)
+        
+        # Специфичные рекомендации по типам метрик
+        specific_tips = {
+            'revenue': {
+                'excellent': ['Продолжайте мониторинг трендов', 'Отслеживайте сезонные паттерны'],
+                'good': ['Проверьте влияние промо-акций', 'Анализируйте выбросы в данных'],
+                'acceptable': ['Уточните прогноз для праздничных дней', 'Проверьте корреляцию с внешними факторами'],
+                'warning': ['Проанализируйте аномальные периоды', 'Рассмотрите добавление внешних регрессоров'],
+                'poor': ['Проведите глубокий анализ данных', 'Рассмотрите использование ML-моделей'],
+                'critical': ['Требуется аудит качества данных', 'Возможны структурные изменения в бизнесе']
+            },
+            'traffic': {
+                'excellent': ['Модель хорошо улавливает паттерны', 'Продолжайте текущий подход'],
+                'good': ['Проверьте учет выходных дней', 'Уточните влияние погоды'],
+                'acceptable': ['Добавьте учет локальных событий', 'Проверьте данные о конкурентах'],
+                'warning': ['Анализируйте дни с аномальным трафиком', 'Учтите изменения в расписании'],
+                'poor': ['Проверьте качество подсчета трафика', 'Возможны проблемы с учетом'],
+                'critical': ['Требуется валидация системы учета', 'Проверьте корректность данных']
+            },
+            'check': {
+                'excellent': ['Стабильная ценовая политика работает', 'Клиенты предсказуемы'],
+                'good': ['Отслеживайте изменения в меню', 'Мониторьте средний состав заказа'],
+                'acceptable': ['Проверьте влияние новых позиций', 'Анализируйте структуру продаж'],
+                'warning': ['Возможны изменения в поведении клиентов', 'Проверьте ценовую политику'],
+                'poor': ['Анализируйте изменения в ассортименте', 'Проверьте корректность расчета'],
+                'critical': ['Возможны ошибки в данных', 'Требуется ревизия методологии']
+            }
+        }
+        
+        tips = rank_rec.get('tips', [])
+        specific = specific_tips.get(metric_type, {}).get(quality, [])
+        
+        return {
+            'metric_type': metric_type,
+            'metric_name_rus': metric_name_rus,
+            'mape_value': mape_value,
+            'quality': quality,
+            'quality_rus': self._get_quality_rus(quality),
+            'color_class': self.get_metric_color_class(mape_value),
+            'general_recommendation': rank_rec.get('general', ''),
+            'action_required': rank_rec.get('action', ''),
+            'general_tips': tips,
+            'specific_tips': specific,
+            'all_tips': tips + specific,
+            'priority': self._get_recommendation_priority(quality)
+        }
+    
+    def _get_recommendation_priority(self, quality: str) -> int:
+        """Получение приоритета рекомендации"""
+        priority_map = {
+            'excellent': 0,
+            'good': 1,
+            'acceptable': 2,
+            'warning': 3,
+            'poor': 4,
+            'critical': 5,
+            'catastrophic': 6
+        }
+        return priority_map.get(quality, 3)
