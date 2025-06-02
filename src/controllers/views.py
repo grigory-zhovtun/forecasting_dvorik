@@ -236,9 +236,27 @@ class ForecastViews:
                     for metric_type in ['revenue', 'traffic', 'check']:
                         mape_key = f'MAPE_{metric_type}'
                         if mape_key in metrics and metrics[mape_key] is not None:
-                            structured_recommendations[cafe][metric_type] = rec_engine.get_structured_recommendations_for_metric(
-                                metric_type, metrics[mape_key], metrics.get(f'RMSE_{metric_type}')
-                            )
+                            try:
+                                structured_recommendations[cafe][metric_type] = rec_engine.get_structured_recommendations_for_metric(
+                                    metric_type, metrics[mape_key], metrics.get(f'RMSE_{metric_type}')
+                                )
+                            except Exception as e:
+                                logger.warning(f"Ошибка при получении рекомендаций для {cafe}/{metric_type}: {e}")
+                                # Создаем базовую рекомендацию в случае ошибки
+                                structured_recommendations[cafe][metric_type] = {
+                                    'metric_type': metric_type,
+                                    'metric_name_rus': {'revenue': 'выручки', 'traffic': 'трафика', 'check': 'среднего чека'}.get(metric_type, metric_type),
+                                    'mape_value': metrics[mape_key],
+                                    'quality': 'unknown',
+                                    'quality_rus': 'Неопределено',
+                                    'color_class': 'metric-warning',
+                                    'general_recommendation': 'Требуется анализ данных',
+                                    'action_required': 'Проверьте качество данных',
+                                    'general_tips': ['Проверьте входные данные', 'Обратитесь к администратору'],
+                                    'specific_tips': [],
+                                    'all_tips': ['Проверьте входные данные', 'Обратитесь к администратору'],
+                                    'priority': 3
+                                }
             
             return jsonify({
                 'data': traces,
@@ -251,8 +269,11 @@ class ForecastViews:
             })
             
         except Exception as e:
-            logger.error(f"Ошибка при подготовке данных для графика: {e}")
-            return jsonify({'error': str(e)}), 500
+            logger.error(f"Ошибка при подготовке данных для графика: {e}", exc_info=True)
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"Детали ошибки: {error_details}")
+            return jsonify({'error': str(e), 'details': error_details}), 500
     
     def _prepare_plot_traces(self, df: pd.DataFrame) -> List[dict]:
         """Подготовка данных для графика Plotly с агрегированием по всем кафе"""

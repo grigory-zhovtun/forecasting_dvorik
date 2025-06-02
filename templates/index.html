@@ -1382,7 +1382,11 @@
                     
                     // Обновляем метрики с рекомендациями
                     if (response.metrics && Object.keys(response.metrics).length > 0) {
-                        renderMetricsTable(response.metrics, response.structured_recommendations);
+                        try {
+                            renderMetricsTable(response.metrics, response.structured_recommendations);
+                        } catch (e) {
+                            console.error('Ошибка при отображении метрик:', e);
+                        }
                     }
                 } else {
                     $('#chartContainer').html(`
@@ -1443,7 +1447,11 @@
 
                     // Обновляем метрики качества
                     if (response.metrics && Object.keys(response.metrics).length > 0) {
-                        renderMetricsTable(response.metrics, response.structured_recommendations);
+                        try {
+                            renderMetricsTable(response.metrics, response.structured_recommendations);
+                        } catch (e) {
+                            console.error('Ошибка при обновлении метрик:', e);
+                        }
                     }
 
                 } else {
@@ -1555,16 +1563,22 @@
                             metricTypes.forEach(mType => {
                                 if (structRecs[mType]) {
                                     const rec = structRecs[mType];
+                                    // Безопасное получение значений с дефолтами
+                                    const colorClass = rec.color_class || 'metric-warning';
+                                    const qualityRus = rec.quality_rus || 'Неопределено';
+                                    const generalRec = rec.general_recommendation || 'Требуется анализ данных';
+                                    const actionReq = rec.action_required || 'Проверьте настройки модели';
+                                    const allTips = rec.all_tips || ['Проверьте качество данных'];
                                     
                                     popoverContent += `
                                         <div class="mb-3">
                                             <h6>${metricNames[mType]} 
-                                                <span class="badge ${rec.color_class}">${rec.quality_rus}</span>
+                                                <span class="badge ${colorClass}">${qualityRus}</span>
                                             </h6>
-                                            <p class="mb-1"><strong>${rec.general_recommendation}</strong></p>
-                                            <p class="mb-1 text-danger">${rec.action_required}</p>
+                                            <p class="mb-1"><strong>${generalRec}</strong></p>
+                                            <p class="mb-1 text-danger">${actionReq}</p>
                                             <ul class="recommendation-list small">
-                                                ${rec.all_tips.slice(0, 3).map(tip => `<li>${tip}</li>`).join('')}
+                                                ${allTips.slice(0, 3).map(tip => `<li>${tip}</li>`).join('')}
                                             </ul>
                                         </div>
                                     `;

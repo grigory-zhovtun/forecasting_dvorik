@@ -62,6 +62,11 @@ class RecommendationEngine:
                 'general': 'Критически низкое качество прогноза.',
                 'action': 'Срочно требуется полный пересмотр методологии.',
                 'tips': ['Проведите аудит данных', 'Привлеките экспертов для анализа']
+            },
+            'catastrophic': {
+                'general': 'Катастрофическое качество прогноза.',
+                'action': 'Немедленно остановите использование текущей модели.',
+                'tips': ['Полный пересмотр подхода к прогнозированию', 'Обратитесь к специалистам по анализу данных']
             }
         }
         
@@ -104,7 +109,10 @@ class RecommendationEngine:
                 quality = self._get_mape_quality(mape_value)
                 
                 # Добавляем рекомендации на основе рангов
+                logger.debug(f"Получен ранг качества '{quality}' для {cafe}/{metric_type} с MAPE={mape_value}")
                 rank_rec = self.rank_recommendations.get(quality, {})
+                if not rank_rec:
+                    logger.warning(f"Не найдены рекомендации для ранга '{quality}'")
                 recommendations['rank_based_recommendations'][metric_type] = {
                     'rank': quality,
                     'rank_rus': self._get_quality_rus(quality),
@@ -115,12 +123,15 @@ class RecommendationEngine:
                 
                 # Генерируем детальные рекомендации для проблемных метрик
                 if quality in ['acceptable', 'warning', 'poor', 'critical', 'catastrophic']:
-                    recs = self._generate_metric_recommendations(
-                        metric_type, mape_value, metrics.get(rmse_key), model_type
-                    )
-                    recommendations['general_recommendations'].extend(recs['general'])
-                    recommendations['parameter_recommendations'].update(recs['parameters'])
-                    recommendations['model_recommendations'].extend(recs['models'])
+                    try:
+                        recs = self._generate_metric_recommendations(
+                            metric_type, mape_value, metrics.get(rmse_key), model_type
+                        )
+                        recommendations['general_recommendations'].extend(recs['general'])
+                        recommendations['parameter_recommendations'].update(recs['parameters'])
+                        recommendations['model_recommendations'].extend(recs['models'])
+                    except Exception as e:
+                        logger.warning(f"Ошибка при генерации рекомендаций для {metric_type}: {e}")
         
         # Удаляем дубликаты
         recommendations['general_recommendations'] = list(set(recommendations['general_recommendations']))
@@ -406,7 +417,8 @@ class RecommendationEngine:
             'warning': 'metric-warning',
             'poor': 'metric-poor',
             'critical': 'metric-critical',
-            'catastrophic': 'metric-catastrophic'
+            'catastrophic': 'metric-catastrophic',
+            'unknown': 'metric-warning'  # Добавляем для безопасности
         }
         
         return color_map.get(quality, 'metric-warning')
@@ -449,7 +461,12 @@ class RecommendationEngine:
             Словарь со структурированными рекомендациями
         """
         quality = self._get_mape_quality(mape_value)
-        rank_rec = self.rank_recommendations.get(quality, {})
+        # Добавляем безопасную обработку для неизвестных рангов
+        rank_rec = self.rank_recommendations.get(quality, {
+            'general': 'Качество прогноза требует анализа.',
+            'action': 'Проверьте настройки модели.',
+            'tips': ['Проверьте качество данных', 'Обратитесь к администратору']
+        })
         
         metric_name_rus = {
             'revenue': 'выручки',
@@ -465,7 +482,8 @@ class RecommendationEngine:
                 'acceptable': ['Уточните прогноз для праздничных дней', 'Проверьте корреляцию с внешними факторами'],
                 'warning': ['Проанализируйте аномальные периоды', 'Рассмотрите добавление внешних регрессоров'],
                 'poor': ['Проведите глубокий анализ данных', 'Рассмотрите использование ML-моделей'],
-                'critical': ['Требуется аудит качества данных', 'Возможны структурные изменения в бизнесе']
+                'critical': ['Требуется аудит качества данных', 'Возможны структурные изменения в бизнесе'],
+                'catastrophic': ['Немедленная ревизия всех данных', 'Консультация с экспертами обязательна']
             },
             'traffic': {
                 'excellent': ['Модель хорошо улавливает паттерны', 'Продолжайте текущий подход'],
@@ -473,7 +491,8 @@ class RecommendationEngine:
                 'acceptable': ['Добавьте учет локальных событий', 'Проверьте данные о конкурентах'],
                 'warning': ['Анализируйте дни с аномальным трафиком', 'Учтите изменения в расписании'],
                 'poor': ['Проверьте качество подсчета трафика', 'Возможны проблемы с учетом'],
-                'critical': ['Требуется валидация системы учета', 'Проверьте корректность данных']
+                'critical': ['Требуется валидация системы учета', 'Проверьте корректность данных'],
+                'catastrophic': ['Полная ревизия системы учета трафика', 'Возможны серьезные ошибки в данных']
             },
             'check': {
                 'excellent': ['Стабильная ценовая политика работает', 'Клиенты предсказуемы'],
@@ -481,12 +500,15 @@ class RecommendationEngine:
                 'acceptable': ['Проверьте влияние новых позиций', 'Анализируйте структуру продаж'],
                 'warning': ['Возможны изменения в поведении клиентов', 'Проверьте ценовую политику'],
                 'poor': ['Анализируйте изменения в ассортименте', 'Проверьте корректность расчета'],
-                'critical': ['Возможны ошибки в данных', 'Требуется ревизия методологии']
+                'critical': ['Возможны ошибки в данных', 'Требуется ревизия методологии'],
+                'catastrophic': ['Критические ошибки в расчете чека', 'Немедленно проверьте все формулы']
             }
         }
         
         tips = rank_rec.get('tips', [])
-        specific = specific_tips.get(metric_type, {}).get(quality, [])
+        # Безопасное получение специфических советов
+        metric_specific = specific_tips.get(metric_type, {})
+        specific = metric_specific.get(quality, []) if metric_specific else []
         
         return {
             'metric_type': metric_type,
