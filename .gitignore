@@ -15,6 +15,9 @@ venv.bak/
 dist/
 build/
 
+*.xlsx
+/data
+
 # IDE
 .idea/
 .vscode/
