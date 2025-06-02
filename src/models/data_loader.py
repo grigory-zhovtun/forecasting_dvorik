@@ -36,6 +36,11 @@ class DataLoader:
         })
         self.excluded_cafes = self.config.get('excluded_cafes', ['ПД-15', 'ПД-20', 'ПД-25', 'Кейтеринг', 'Кафе на Садовой', 'Кафе на Невском'])
         self._cache = {}
+    
+    def clear_cache(self):
+        """Очистка кэша для перезагрузки данных"""
+        logger.info("Очистка кэша данных")
+        self._cache = {}
         
     def _load_config(self, config_path: str) -> dict:
         """Загрузка конфигурации из YAML файла"""
@@ -55,14 +60,17 @@ class DataLoader:
                 'excluded_cafes': ['ПД-15', 'ПД-20', 'ПД-25', 'Кейтеринг']
             }
     
-    def load_facts_data(self) -> pd.DataFrame:
+    def load_facts_data(self, force_reload: bool = False) -> pd.DataFrame:
         """
         Загрузка фактических данных о продажах
         
+        Args:
+            force_reload: Если True, данные загружаются заново, игнорируя кэш
+            
         Returns:
             DataFrame с фактическими данными
         """
-        if 'facts' in self._cache:
+        if not force_reload and 'facts' in self._cache:
             return self._cache['facts']
             
         try:
@@ -246,7 +254,8 @@ class DataLoader:
         Returns:
             DataFrame с данными кафе
         """
-        df = self.load_facts_data()
+        # Всегда перезагружаем данные для получения свежей информации
+        df = self.load_facts_data(force_reload=True)
         cafe_df = df[df['Кафе'] == cafe].copy()
         
         # Группировка по датам (если есть дубликаты)

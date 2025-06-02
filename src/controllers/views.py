@@ -112,6 +112,9 @@ class ForecastViews:
         params = request.json
         selected_cafes = params.get('cafes', [])
         
+        # Очищаем кэш данных для загрузки свежей информации
+        self.data_loader.clear_cache()
+        
         if not selected_cafes:
             return jsonify({'error': 'Не выбрано ни одного кафе'}), 400
         

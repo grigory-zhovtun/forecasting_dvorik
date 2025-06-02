@@ -477,6 +477,23 @@
             border-radius: 4px;
             padding: 0.25rem 0.5rem;
         }
+        
+        /* Стили для корректировок */
+        .adjustment-item {
+            border: 1px solid #dee2e6;
+            transition: all 0.3s ease;
+        }
+        
+        .adjustment-item:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-color: var(--primary-color);
+        }
+        
+        .adjustment-item .form-label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 0.25rem;
+        }
     </style>
 </head>
 <body>
@@ -1383,41 +1400,51 @@
             $('#addAdjustment').click(function() {
                 const adjId = Date.now();
                 const adjItem = $(`
-                    <div class="card mb-2 adjustment-item" data-adj-id="${adjId}">
-                        <div class="card-body p-2">
-                            <div class="row g-2">
-                                <div class="col-md-3">
-                                    <select class="form-select form-select-sm adj-cafe" id="adjCafe${adjId}">
+                    <div class="card mb-3 adjustment-item" data-adj-id="${adjId}">
+                        <div class="card-body">
+                            <div class="row mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Кафе</label>
+                                    <select class="form-select adj-cafe" id="adjCafe${adjId}">
                                         <option value="ALL">Все кафе</option>
                                     </select>
                                 </div>
-                                <div class="col-md-2">
-                                    <select class="form-select form-select-sm adj-metric">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Показатель</label>
+                                    <select class="form-select adj-metric">
                                         <option value="revenue">Выручка</option>
                                         <option value="traffic">Трафик</option>
                                         <option value="avg_check">Средний чек</option>
                                     </select>
                                 </div>
-                                <div class="col-md-2">
-                                    <select class="form-select form-select-sm adj-type">
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Тип корректировки</label>
+                                    <select class="form-select adj-type">
                                         <option value="percent">Процент</option>
-                                        <option value="absolute">Абсолют</option>
+                                        <option value="absolute">Абсолютное значение</option>
                                     </select>
                                 </div>
-                                <div class="col-md-1">
-                                    <input type="number" class="form-control form-control-sm adj-value" step="any" placeholder="0">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Значение</label>
+                                    <input type="number" class="form-control adj-value" step="any" placeholder="0">
                                 </div>
-                                <div class="col-md-2">
-                                    <input type="date" class="form-control form-control-sm adj-date-from">
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Дата начала</label>
+                                    <input type="date" class="form-control adj-date-from">
                                 </div>
-                                <div class="col-md-2">
-                                    <input type="date" class="form-control form-control-sm adj-date-to">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Дата окончания</label>
+                                    <input type="date" class="form-control adj-date-to">
                                 </div>
-                                <div class="col-auto">
-                                    <button class="btn btn-sm btn-danger remove-adj">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </div>
+                            </div>
+                            <div class="text-end">
+                                <button class="btn btn-sm btn-danger remove-adj">
+                                    <i class="bi bi-trash"></i> Удалить
+                                </button>
                             </div>
                         </div>
                     </div>
