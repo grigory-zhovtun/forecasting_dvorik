@@ -636,7 +636,48 @@
                     </div>
 
                     <div class="date-filter" id="dateFilter" style="display: none;">
+                        <div class="row align-items-end mb-3">
+                            <div class="col-md-8">
+                                <div class="btn-group" role="group" aria-label="Тип отображения">
+                                    <input type="radio" class="btn-check" name="viewType" id="lineChart" value="line" checked>
+                                    <label class="btn btn-outline-primary" for="lineChart">
+                                        <i class="bi bi-graph-up"></i> График по дням
+                                    </label>
+                                    <input type="radio" class="btn-check" name="viewType" id="barChart" value="bar">
+                                    <label class="btn btn-outline-primary" for="barChart">
+                                        <i class="bi bi-bar-chart"></i> Столбцы по периодам
+                                    </label>
+                                </div>
+                                <div class="d-inline-block ms-3" id="aggregationPeriodContainer" style="display: none;">
+                                    <label for="aggregationPeriod" class="form-label d-inline me-2">Период агрегации:</label>
+                                    <select class="form-select d-inline-block w-auto" id="aggregationPeriod">
+                                        <option value="month" selected>Месяц</option>
+                                        <option value="quarter">Квартал</option>
+                                        <option value="halfyear">Полугодие</option>
+                                        <option value="year">Год</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-primary" id="updateChart">
+                                    <i class="bi bi-arrow-clockwise"></i> Обновить график
+                                </button>
+                            </div>
+                        </div>
                         <div class="row align-items-end">
+                            <div class="col-md-4" id="monthNavigationContainer" style="display: block;">
+                                <div class="btn-group w-100" role="group">
+                                    <button type="button" class="btn btn-outline-secondary" id="prevMonth">
+                                        <i class="bi bi-chevron-left"></i> Пред. месяц
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" id="currentMonth" disabled style="flex: 1;">
+                                        <span id="currentMonthText">Месяц</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" id="nextMonth">
+                                        След. месяц <i class="bi bi-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
                             <div class="col-md-4">
                                 <label for="dateFrom" class="form-label">Дата начала</label>
                                 <input type="date" class="form-control" id="dateFrom">
@@ -644,11 +685,6 @@
                             <div class="col-md-4">
                                 <label for="dateTo" class="form-label">Дата окончания</label>
                                 <input type="date" class="form-control" id="dateTo">
-                            </div>
-                            <div class="col-md-4">
-                                <button class="btn btn-primary w-100" id="updateChart">
-                                    <i class="bi bi-arrow-clockwise"></i> Обновить график
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -880,6 +916,9 @@
         let cafes = [];
         let forecastData = null;
         let cancelRequested = false;
+        let currentViewType = 'line';
+        let currentAggregationPeriod = 'month';
+        let currentMonth = new Date();
 
         // Инициализация
         $(document).ready(function() {
@@ -1081,6 +1120,24 @@
             });
         }
 
+        // Функции для навигации по месяцам
+        function updateMonthNavigation() {
+            const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 
+                              'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+            const monthText = monthNames[currentMonth.getMonth()] + ' ' + currentMonth.getFullYear();
+            $('#currentMonthText').text(monthText);
+        }
+
+        function setDatesForCurrentMonth() {
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            
+            $('#dateFrom').val(firstDay.toISOString().split('T')[0]);
+            $('#dateTo').val(lastDay.toISOString().split('T')[0]);
+        }
+
         // Обновление списка кафе для корректировок
         function updateAdjustmentCafeList() {
             // Обновляем все селекты кафе в корректировках
@@ -1168,6 +1225,40 @@
             // Экспорт в Excel
             $('#exportExcel').click(function() {
                 window.location.href = '/api/export_excel';
+            });
+
+            // Обработчик переключения типа отображения
+            $('input[name="viewType"]').change(function() {
+                currentViewType = $(this).val();
+                if (currentViewType === 'bar') {
+                    $('#aggregationPeriodContainer').show();
+                    $('#monthNavigationContainer').hide();
+                } else {
+                    $('#aggregationPeriodContainer').hide();
+                    $('#monthNavigationContainer').show();
+                }
+                updateChart();
+            });
+
+            // Обработчик изменения периода агрегации
+            $('#aggregationPeriod').change(function() {
+                currentAggregationPeriod = $(this).val();
+                updateChart();
+            });
+
+            // Обработчики навигации по месяцам
+            $('#prevMonth').click(function() {
+                currentMonth.setMonth(currentMonth.getMonth() - 1);
+                updateMonthNavigation();
+                setDatesForCurrentMonth();
+                updateChart();
+            });
+
+            $('#nextMonth').click(function() {
+                currentMonth.setMonth(currentMonth.getMonth() + 1);
+                updateMonthNavigation();
+                setDatesForCurrentMonth();
+                updateChart();
             });
 
             // Обработчики для панели настроек
@@ -1334,6 +1425,9 @@
                     } else {
                         renderSummaryTable(null); // Clear table or show default
                     }
+                    
+                    // Инициализируем навигацию по месяцам при загрузке результатов
+                    updateMonthNavigation();
                     
                     // Табы уже видны, панель корректировок показывается через табы
                     
@@ -1506,6 +1600,10 @@
             let url = '/api/get_forecast_data?';
             if (dateFrom) url += `date_from=${dateFrom}&`;
             if (dateTo) url += `date_to=${dateTo}&`;
+            url += `view_type=${currentViewType}&`;
+            if (currentViewType === 'bar') {
+                url += `aggregation_period=${currentAggregationPeriod}&`;
+            }
 
             $('.loading-spinner').show();
              // Убедимся, что есть контейнер для графика

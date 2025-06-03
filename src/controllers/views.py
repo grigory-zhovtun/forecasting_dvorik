@@ -217,9 +217,17 @@ class ForecastViews:
             if date_to:
                 df = df[df['ds'] <= pd.to_datetime(date_to)]
             
+            # Получаем параметры отображения
+            view_type = request.args.get('view_type', 'line')
+            aggregation_period = request.args.get('aggregation_period', 'month')
+            
             # Подготовка данных для графика
-            traces = self._prepare_plot_traces(df)
-            layout = self._prepare_plot_layout()
+            if view_type == 'bar':
+                traces = self._prepare_bar_chart_traces(df, aggregation_period)
+                layout = self._prepare_bar_chart_layout()
+            else:
+                traces = self._prepare_plot_traces(df)
+                layout = self._prepare_plot_layout()
             
             # Подготовка сводных данных
             summary_data = self._prepare_summary_data(df)
@@ -373,6 +381,161 @@ class ForecastViews:
         
         return traces
     
+    def _prepare_bar_chart_traces(self, df: pd.DataFrame, aggregation_period: str) -> List[dict]:
+        """Подготовка данных для столбчатой диаграммы с агрегацией по периодам"""
+        traces = []
+        
+        # Копируем DataFrame для агрегации
+        df_agg = df.copy()
+        
+        # Добавляем колонки для агрегации по периодам
+        if aggregation_period == 'month':
+            df_agg['period'] = df_agg['ds'].dt.to_period('M')
+            df_agg['period_str'] = df_agg['ds'].dt.strftime('%Y-%m')
+            period_format = '%B %Y'
+        elif aggregation_period == 'quarter':
+            df_agg['period'] = df_agg['ds'].dt.to_period('Q')
+            df_agg['period_str'] = df_agg['period'].astype(str)
+            period_format = 'Q%q %Y'
+        elif aggregation_period == 'halfyear':
+            # Полугодие определяем вручную
+            df_agg['half'] = df_agg['ds'].dt.month.apply(lambda x: 'H1' if x <= 6 else 'H2')
+            df_agg['year'] = df_agg['ds'].dt.year
+            df_agg['period_str'] = df_agg['year'].astype(str) + '-' + df_agg['half']
+            period_format = None
+        elif aggregation_period == 'year':
+            df_agg['period'] = df_agg['ds'].dt.to_period('Y')
+            df_agg['period_str'] = df_agg['ds'].dt.strftime('%Y')
+            period_format = '%Y'
+        
+        # Группируем данные по периодам
+        if aggregation_period == 'halfyear':
+            grouped_fact = df_agg[df_agg['revenue_fact'].notna()].groupby(['period_str', 'half', 'year']).agg({
+                'revenue_fact': 'sum'
+            }).reset_index()
+            grouped_forecast = df_agg[df_agg['revenue_forecast'].notna()].groupby(['period_str', 'half', 'year']).agg({
+                'revenue_forecast': 'sum'
+            }).reset_index()
+        else:
+            grouped_fact = df_agg[df_agg['revenue_fact'].notna()].groupby('period_str').agg({
+                'revenue_fact': 'sum'
+            }).reset_index()
+            grouped_forecast = df_agg[df_agg['revenue_forecast'].notna()].groupby('period_str').agg({
+                'revenue_forecast': 'sum'
+            }).reset_index()
+        
+        # Создаем объединенный датафрейм для правильного порядка периодов
+        all_periods = sorted(set(grouped_fact['period_str'].tolist() + grouped_forecast['period_str'].tolist()))
+        
+        # Форматируем метки периодов для отображения
+        period_labels = []
+        for period in all_periods:
+            if aggregation_period == 'month':
+                # Преобразуем YYYY-MM в "Месяц YYYY"
+                year, month = period.split('-')
+                month_names = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                             'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+                period_labels.append(f"{month_names[int(month)-1]} {year}")
+            elif aggregation_period == 'quarter':
+                # Q1 2024 -> "1 кв. 2024"
+                period_labels.append(period.replace('Q', ' кв. '))
+            elif aggregation_period == 'halfyear':
+                # 2024-H1 -> "1 полугодие 2024"
+                year, half = period.split('-')
+                half_num = '1' if half == 'H1' else '2'
+                period_labels.append(f"{half_num} полугодие {year}")
+            else:  # year
+                period_labels.append(period)
+        
+        # Подготовка данных для факта
+        fact_values = []
+        for period in all_periods:
+            fact_row = grouped_fact[grouped_fact['period_str'] == period]
+            if not fact_row.empty:
+                fact_values.append(fact_row['revenue_fact'].iloc[0])
+            else:
+                fact_values.append(0)
+        
+        # Подготовка данных для прогноза
+        forecast_values = []
+        for period in all_periods:
+            forecast_row = grouped_forecast[grouped_forecast['period_str'] == period]
+            if not forecast_row.empty:
+                forecast_values.append(forecast_row['revenue_forecast'].iloc[0])
+            else:
+                forecast_values.append(0)
+        
+        # Добавляем столбцы факта
+        if any(v > 0 for v in fact_values):
+            traces.append({
+                'x': period_labels,
+                'y': fact_values,
+                'name': 'Факт',
+                'type': 'bar',
+                'marker': {'color': '#4472C4'},
+                'text': [f'{v:,.0f} ₽' for v in fact_values],
+                'textposition': 'outside',
+                'hovertemplate': '<b>%{x}</b><br>Факт: %{y:,.0f} ₽<extra></extra>'
+            })
+        
+        # Добавляем столбцы прогноза
+        if any(v > 0 for v in forecast_values):
+            traces.append({
+                'x': period_labels,
+                'y': forecast_values,
+                'name': 'Прогноз',
+                'type': 'bar',
+                'marker': {'color': '#E15759'},
+                'text': [f'{v:,.0f} ₽' for v in forecast_values],
+                'textposition': 'outside',
+                'hovertemplate': '<b>%{x}</b><br>Прогноз: %{y:,.0f} ₽<extra></extra>'
+            })
+        
+        return traces
+    
+    def _prepare_bar_chart_layout(self) -> dict:
+        """Подготовка layout для столбчатой диаграммы"""
+        return {
+            'title': {
+                'text': 'Прогноз выручки по периодам - Пироговый Дворик',
+                'font': {'size': 24, 'family': 'Arial, sans-serif'}
+            },
+            'xaxis': {
+                'title': 'Период',
+                'showgrid': False,
+                'showline': True,
+                'linewidth': 1,
+                'linecolor': 'rgba(128, 128, 128, 0.4)'
+            },
+            'yaxis': {
+                'title': 'Выручка, ₽',
+                'tickformat': ',.0f',
+                'showgrid': True,
+                'gridcolor': 'rgba(128, 128, 128, 0.2)',
+                'showline': True,
+                'linewidth': 1,
+                'linecolor': 'rgba(128, 128, 128, 0.4)'
+            },
+            'barmode': 'group',
+            'bargap': 0.15,
+            'bargroupgap': 0.1,
+            'hovermode': 'x unified',
+            'legend': {
+                'orientation': 'h',
+                'yanchor': 'bottom',
+                'y': -0.2,
+                'xanchor': 'center',
+                'x': 0.5,
+                'bgcolor': 'rgba(255, 255, 255, 0.8)',
+                'bordercolor': 'rgba(128, 128, 128, 0.2)',
+                'borderwidth': 1
+            },
+            'margin': {'l': 80, 'r': 50, 't': 80, 'b': 100},
+            'plot_bgcolor': 'white',
+            'paper_bgcolor': '#f8f9fa',
+            'font': {'family': 'Arial, sans-serif', 'size': 12}
+        }
+    
     def apply_adjustments(self):
         """Применение корректировок к данным прогноза"""
         try:
@@ -434,9 +597,17 @@ class ForecastViews:
             # Сохраняем скорректированные данные
             self.app.adjusted_forecast_results[session_id] = adjusted_df
             
+            # Получаем параметры отображения из текущего запроса
+            view_type = request.args.get('view_type', 'line')
+            aggregation_period = request.args.get('aggregation_period', 'month')
+            
             # Подготавливаем данные для графика
-            traces = self._prepare_plot_traces(adjusted_df)
-            layout = self._prepare_plot_layout()
+            if view_type == 'bar':
+                traces = self._prepare_bar_chart_traces(adjusted_df, aggregation_period)
+                layout = self._prepare_bar_chart_layout()
+            else:
+                traces = self._prepare_plot_traces(adjusted_df)
+                layout = self._prepare_plot_layout()
             
             # Подготавливаем сводные данные
             summary_data = self._prepare_summary_data(adjusted_df)
