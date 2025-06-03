@@ -926,6 +926,11 @@
             loadInitialData();
             setupEventHandlers();
             loadPassportData();
+            
+            // Установка начального состояния интерфейса
+            $('#aggregationPeriodContainer').hide();
+            $('#monthNavigationContainer').show();
+            
             // Инициализация тултипов Bootstrap
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
             var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
@@ -1137,6 +1142,27 @@
             $('#dateFrom').val(firstDay.toISOString().split('T')[0]);
             $('#dateTo').val(lastDay.toISOString().split('T')[0]);
         }
+        
+        function updateMonthIndicatorFromDates() {
+            const dateFrom = $('#dateFrom').val();
+            const dateTo = $('#dateTo').val();
+            
+            if (dateFrom) {
+                const fromDate = new Date(dateFrom);
+                const toDate = dateTo ? new Date(dateTo) : fromDate;
+                
+                // Проверяем, покрывают ли даты полный месяц
+                const firstDay = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+                const lastDay = new Date(fromDate.getFullYear(), fromDate.getMonth() + 1, 0);
+                
+                if (fromDate.getTime() === firstDay.getTime() && 
+                    toDate.getTime() === lastDay.getTime()) {
+                    // Это полный месяц, обновляем индикатор
+                    currentMonth = new Date(fromDate);
+                    updateMonthNavigation();
+                }
+            }
+        }
 
         // Обновление списка кафе для корректировок
         function updateAdjustmentCafeList() {
@@ -1238,6 +1264,11 @@
                     $('#monthNavigationContainer').show();
                 }
                 updateChart();
+            });
+            
+            // Обработчик изменения дат вручную
+            $('#dateFrom, #dateTo').change(function() {
+                updateMonthIndicatorFromDates();
             });
 
             // Обработчик изменения периода агрегации
@@ -1395,6 +1426,11 @@
             $('#exportExcel').show();
             $('.loading-spinner').show();
             $('#chartContainer').html('<div id="plotlyChart"></div>'); // Очистка перед загрузкой нового графика
+            
+            // Устанавливаем текущий месяц по умолчанию
+            currentMonth = new Date();
+            setDatesForCurrentMonth();
+            updateMonthNavigation();
 
             $.get('/api/get_forecast_data', function(response) {
                 console.log('Получены данные для графика:', response);
@@ -1428,6 +1464,17 @@
                     
                     // Инициализируем навигацию по месяцам при загрузке результатов
                     updateMonthNavigation();
+                    
+                    // Обновляем даты если они пришли с сервера
+                    if (response.current_dates) {
+                        if (response.current_dates.date_from) {
+                            $('#dateFrom').val(response.current_dates.date_from);
+                        }
+                        if (response.current_dates.date_to) {
+                            $('#dateTo').val(response.current_dates.date_to);
+                        }
+                        updateMonthIndicatorFromDates();
+                    }
                     
                     // Табы уже видны, панель корректировок показывается через табы
                     
@@ -1633,6 +1680,17 @@
                         } catch (e) {
                             console.error('Ошибка при обновлении метрик:', e);
                         }
+                    }
+                    
+                    // Обновляем даты если они пришли с сервера
+                    if (response.current_dates) {
+                        if (response.current_dates.date_from) {
+                            $('#dateFrom').val(response.current_dates.date_from);
+                        }
+                        if (response.current_dates.date_to) {
+                            $('#dateTo').val(response.current_dates.date_to);
+                        }
+                        updateMonthIndicatorFromDates();
                     }
 
                 } else {

@@ -276,7 +276,11 @@ class ForecastViews:
                 'params': forecast_params,
                 'summary_data': summary_data,
                 'recommendations': recommendations,
-                'structured_recommendations': structured_recommendations
+                'structured_recommendations': structured_recommendations,
+                'current_dates': {
+                    'date_from': date_from,
+                    'date_to': date_to
+                }
             })
             
         except Exception as e:
