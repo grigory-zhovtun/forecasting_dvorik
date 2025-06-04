@@ -1134,13 +1134,26 @@
         }
 
         function setDatesForCurrentMonth() {
+            // Создаем новые объекты Date для избежания проблем с часовыми поясами
             const year = currentMonth.getFullYear();
             const month = currentMonth.getMonth();
+            
+            // Первый день месяца
             const firstDay = new Date(year, month, 1);
+            
+            // Последний день месяца (0-й день следующего месяца = последний день текущего)
             const lastDay = new Date(year, month + 1, 0);
             
-            $('#dateFrom').val(firstDay.toISOString().split('T')[0]);
-            $('#dateTo').val(lastDay.toISOString().split('T')[0]);
+            // Форматируем даты в YYYY-MM-DD
+            const formatDate = (date) => {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            };
+            
+            $('#dateFrom').val(formatDate(firstDay));
+            $('#dateTo').val(formatDate(lastDay));
         }
         
         function updateMonthIndicatorFromDates() {
@@ -1279,14 +1292,36 @@
 
             // Обработчики навигации по месяцам
             $('#prevMonth').click(function() {
-                currentMonth.setMonth(currentMonth.getMonth() - 1);
+                // Создаем новый объект Date для избежания проблем с переходом через границы года
+                const year = currentMonth.getFullYear();
+                const month = currentMonth.getMonth();
+                
+                if (month === 0) {
+                    // Если январь, переходим на декабрь предыдущего года
+                    currentMonth = new Date(year - 1, 11, 1);
+                } else {
+                    // Иначе просто уменьшаем месяц
+                    currentMonth = new Date(year, month - 1, 1);
+                }
+                
                 updateMonthNavigation();
                 setDatesForCurrentMonth();
                 updateChart();
             });
 
             $('#nextMonth').click(function() {
-                currentMonth.setMonth(currentMonth.getMonth() + 1);
+                // Создаем новый объект Date для избежания проблем с переходом через границы года
+                const year = currentMonth.getFullYear();
+                const month = currentMonth.getMonth();
+                
+                if (month === 11) {
+                    // Если декабрь, переходим на январь следующего года
+                    currentMonth = new Date(year + 1, 0, 1);
+                } else {
+                    // Иначе просто увеличиваем месяц
+                    currentMonth = new Date(year, month + 1, 1);
+                }
+                
                 updateMonthNavigation();
                 setDatesForCurrentMonth();
                 updateChart();
